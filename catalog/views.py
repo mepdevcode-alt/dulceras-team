@@ -16,6 +16,7 @@ from .serializers import (
     CategoryPublicSerializer, ProductPublicSerializer,
     CategoryAdminSerializer, ProductAdminSerializer, ProductVariantAdminSerializer,
 )
+from users.permissions import IsTeamMember
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,7 +100,7 @@ class TenantFilterMixin:
 class AdminCategoryViewSet(TenantFilterMixin, viewsets.ModelViewSet):
     queryset = Category.objects.all().order_by('name')
     serializer_class = CategoryAdminSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     pagination_class = AdminCatalogPagination
 
 
@@ -111,7 +112,7 @@ class AdminProductViewSet(TenantFilterMixin, viewsets.ModelViewSet):
         .order_by('sort_order', 'name')
     )
     serializer_class = ProductAdminSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     pagination_class = AdminCatalogPagination
 
     def perform_create(self, serializer):
@@ -133,7 +134,7 @@ class AdminProductViewSet(TenantFilterMixin, viewsets.ModelViewSet):
 class AdminProductVariantViewSet(TenantFilterMixin, viewsets.ModelViewSet):
     queryset = ProductVariant.objects.select_related('product').order_by('sort_order', 'name')
     serializer_class = ProductVariantAdminSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
 
     def perform_create(self, serializer):
         product = serializer.validated_data.get('product')

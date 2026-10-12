@@ -7,6 +7,8 @@ from django.utils import timezone
 from datetime import timedelta
 from tenants.models import Plan, Subscription, Tenant, BusinessProfile, DeliveryZone
 from catalog.models import Category, Product, ProductVariant
+from customers.models import Customer, CustomerAddress
+from orders.models import Order, OrderItem, OrderStatusHistory
 
 User = get_user_model()
 
@@ -150,6 +152,60 @@ DELIVERY_ZONES = [
     {'name': 'GBA — Zona Oeste',  'description': 'Morón, Ramos Mejía y alrededores',            'price': Decimal('2800')},
 ]
 
+# ── Pedidos de demo ──────────────────────────────────────────────────────────
+# Emails @example.com: nunca le llegan a una persona real al probar n8n/SMTP.
+DEMO_ORDER_MARKER = 'seed-demo'
+
+DEMO_CUSTOMERS = [
+    {'name': 'Lucía Fernández',  'phone': '1145551001', 'email': 'lucia.fernandez@example.com',
+     'address': {'street': 'Av. Corrientes 4120, 3°B', 'neighborhood': 'Almagro'}},
+    {'name': 'Martín Gómez',     'phone': '1145551002', 'email': 'martin.gomez@example.com',
+     'address': {'street': 'Gorriti 5230', 'neighborhood': 'Palermo'}},
+    {'name': 'Sofía Ramírez',    'phone': '1145551003', 'email': 'sofia.ramirez@example.com',
+     'address': {'street': 'Cabildo 2450, 7°A', 'neighborhood': 'Belgrano'}},
+    {'name': 'Julián Pereyra',   'phone': '1145551004', 'email': 'julian.pereyra@example.com',
+     'address': {'street': 'Av. La Plata 1380', 'neighborhood': 'Boedo'}},
+    {'name': 'Camila Torres',    'phone': '1145551005', 'email': 'camila.torres@example.com',
+     'address': {'street': 'Av. del Libertador 15200', 'neighborhood': 'Acassuso', 'city': 'San Isidro'}},
+    {'name': 'Tomás Álvarez',    'phone': '1145551006', 'email': 'tomas.alvarez@example.com', 'address': None},
+    {'name': 'Valentina Sosa',   'phone': '1145551007', 'email': 'valentina.sosa@example.com', 'address': None},
+    {'name': 'Nicolás Díaz',     'phone': '1145551008', 'email': '', 'address': None},  # sin email: prueba "Sin destinatario"
+]
+
+# days: fecha de entrega relativa a hoy; created: hace cuántos días se hizo el pedido;
+# zone: None = retiro en local; items: (producto, variante, cantidad)
+DEMO_ORDERS = [
+    {'customer': 0, 'status': 'delivered', 'days': -20, 'created': 24, 'zone': None,
+     'items': [('Torta de Chocolate', 'Entera (16-20 porciones)', 1)],
+     'notes': 'Para un cumpleaños de 15, sin decoración con nombre.'},
+    {'customer': 1, 'status': 'delivered', 'days': -12, 'created': 15, 'zone': 'CABA — Centro',
+     'items': [('Cookie Chocolate Chips', 'Caja x6', 2), ('Brownie Clásico', 'Caja x4', 1)], 'notes': ''},
+    {'customer': 2, 'status': 'delivered', 'days': -5, 'created': 8, 'zone': None,
+     'items': [('Budín de Limón', 'Grande (12 porciones)', 1), ('Chipá Tradicional', 'Bolsa x12', 1)], 'notes': ''},
+    {'customer': 3, 'status': 'cancelled', 'days': -3, 'created': 6, 'zone': None,
+     'items': [('Tiramisú', 'Caja x4 porciones', 1)], 'notes': 'El cliente canceló por viaje.'},
+    {'customer': 0, 'status': 'out_for_delivery', 'days': 0, 'created': 3, 'zone': 'Almagro',
+     'items': [('Cheesecake de Dulce de Leche', 'Caja x4 porciones', 1)], 'notes': 'Tocar timbre 3°B.'},
+    {'customer': 5, 'status': 'ready', 'days': 0, 'created': 2, 'zone': None,
+     'items': [('Chipá Tradicional', 'Bolsa x6', 2)], 'notes': ''},
+    {'customer': 2, 'status': 'in_production', 'days': 1, 'created': 4, 'zone': 'CABA — Norte',
+     'items': [('Torta de Vainilla y Frutos Rojos', '1/2 (8-10 porciones)', 1)], 'notes': 'Sin frutillas, solo arándanos.'},
+    {'customer': 6, 'status': 'in_production', 'days': 2, 'created': 3, 'zone': None,
+     'items': [('Cheesecake de Dulce de Leche', 'Porción individual', 6)], 'notes': ''},
+    {'customer': 1, 'status': 'confirmed', 'days': 2, 'created': 2, 'zone': None,
+     'items': [('Brownie con Chips de Chocolate Blanco', 'Caja x6', 1), ('Cookie Doble Chocolate', 'Unidad', 4)],
+     'notes': ''},
+    {'customer': 4, 'status': 'deposit_paid', 'days': 3, 'created': 1, 'zone': 'GBA — Zona Norte',
+     'items': [('Torta de Chocolate', '1/2 (8-10 porciones)', 1)], 'notes': 'Escribir "Feliz cumple Ana" en la torta.'},
+    {'customer': 7, 'status': 'pending_deposit', 'days': 4, 'created': 1, 'zone': None,
+     'items': [('Budín de Banana y Nuez', 'Pequeño (6 porciones)', 1)], 'notes': ''},
+    {'customer': 3, 'status': 'pending_deposit', 'days': 6, 'created': 0, 'zone': 'CABA — Sur',
+     'items': [('Cookie Chocolate Chips', 'Caja x4', 2)], 'notes': 'Si puede ser después de las 17hs, mejor.'},
+]
+
+# Recorrido de estados hasta el estado final de cada pedido
+STATUS_FLOW = ['pending_deposit', 'deposit_paid', 'confirmed', 'in_production', 'ready']
+
 
 class Command(BaseCommand):
     help = 'Carga el seed data de Dulceras Team'
@@ -157,10 +213,17 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--reset', action='store_true', help='Elimina y recrea todos los datos del tenant')
         parser.add_argument('--admin-password', default='admin1234', help='Contraseña del usuario admin (default: admin1234)')
+        parser.add_argument('--skip-orders', action='store_true', help='No crear clientes ni pedidos de demo')
 
     @transaction.atomic
     def handle(self, *args, **options):
         if options['reset']:
+            # FKs con PROTECT (pago→pedido, pedido→cliente/variante, producto→categoría):
+            # borrar en orden antes del tenant
+            from payments.models import PaymentIntent
+            PaymentIntent.objects.filter(order__tenant__slug=TENANT_SLUG).delete()
+            Order.objects.filter(tenant__slug=TENANT_SLUG).delete()
+            Product.objects.filter(tenant__slug=TENANT_SLUG).delete()
             Tenant.objects.filter(slug=TENANT_SLUG).delete()
             self.stdout.write(self.style.WARNING('Tenant Dulceras Team eliminado.'))
 
@@ -290,7 +353,13 @@ class Command(BaseCommand):
 
         # Admin user
         admin_password = options['admin_password']
-        if not User.objects.filter(username='admin', tenant=tenant).exists():
+        existing_admin = User.objects.filter(username='admin').first()
+        if existing_admin and existing_admin.tenant_id != tenant.id:
+            # Tras --reset el usuario queda sin tenant: reasignarlo en lugar de duplicarlo
+            existing_admin.tenant = tenant
+            existing_admin.save(update_fields=['tenant'])
+            self.stdout.write('  ~ Usuario admin reasignado al tenant')
+        elif not existing_admin:
             User.objects.create_user(
                 username='admin',
                 password=admin_password,
@@ -318,4 +387,108 @@ class Command(BaseCommand):
             sub.save(update_fields=['status', 'plan', 'current_period_end', 'updated_at'])
         self.stdout.write(f"  {'+ ' if sub_created else '~ '}Subscription: {sub.status}")
 
+        if not options['skip_orders']:
+            self._seed_demo_orders(tenant)
+
         self.stdout.write(self.style.SUCCESS('\nSeed de Dulceras Team completado.'))
+
+    def _seed_demo_orders(self, tenant):
+        if Order.objects.filter(tenant=tenant, internal_notes=DEMO_ORDER_MARKER).exists():
+            self.stdout.write('  ~ Pedidos de demo ya existen (usar --reset para recrearlos)')
+            return
+
+        admin = User.objects.filter(tenant=tenant, role=User.TENANT_ADMIN).first()
+        zones = {z.name: z for z in DeliveryZone.objects.filter(tenant=tenant)}
+        variants = {
+            (v.product.name, v.name): v
+            for v in ProductVariant.objects.filter(tenant=tenant).select_related('product')
+        }
+
+        customers = []
+        for data in DEMO_CUSTOMERS:
+            customer, _ = Customer.objects.get_or_create(
+                tenant=tenant, name=data['name'],
+                defaults={'phone': data['phone'], 'email': data['email']},
+            )
+            address = None
+            if data['address']:
+                address, _ = CustomerAddress.objects.get_or_create(
+                    customer=customer, street=data['address']['street'],
+                    defaults={
+                        'neighborhood': data['address']['neighborhood'],
+                        'city': data['address'].get('city', 'Buenos Aires'),
+                        'is_default': True,
+                    },
+                )
+            customers.append((customer, address))
+
+        now = timezone.now()
+        today = timezone.localdate()
+        for data in DEMO_ORDERS:
+            customer, address = customers[data['customer']]
+            zone = zones.get(data['zone']) if data['zone'] else None
+            rows = []
+            for product_name, variant_name, qty in data['items']:
+                variant = variants[(product_name, variant_name)]
+                rows.append((variant, qty, variant.price * qty))
+
+            subtotal = sum(r[2] for r in rows)
+            delivery_cost = zone.price if zone else Decimal('0')
+            total = subtotal + delivery_cost
+            deposit_pct = Decimal('50')
+            deposit = (total * deposit_pct / 100).quantize(Decimal('1'))
+
+            order = Order.objects.create(
+                tenant=tenant,
+                customer=customer,
+                status=data['status'],
+                delivery_method=Order.DELIVERY if zone else Order.PICKUP,
+                delivery_zone=zone,
+                delivery_address=address if zone else None,
+                required_date=today + timedelta(days=data['days']),
+                subtotal=subtotal,
+                delivery_cost=delivery_cost,
+                total=total,
+                deposit_percentage=deposit_pct,
+                deposit_amount=deposit,
+                balance_amount=total - deposit,
+                notes=data['notes'],
+                internal_notes=DEMO_ORDER_MARKER,
+            )
+            OrderItem.objects.bulk_create([
+                OrderItem(
+                    order=order, product_variant=variant, product_name=variant.product.name,
+                    variant_name=variant.name, unit_price=variant.price, quantity=qty, subtotal=line,
+                )
+                for variant, qty, line in rows
+            ])
+
+            created_at = now - timedelta(days=data['created'], hours=2)
+            Order.objects.filter(pk=order.pk).update(created_at=created_at)
+            self._seed_status_history(order, data['status'], created_at, admin)
+            self.stdout.write(
+                f"  + Pedido #{order.pk}: {customer.name} — {order.get_status_display()} — ${total}"
+            )
+
+    def _seed_status_history(self, order, final_status, created_at, admin):
+        if final_status == Order.CANCELLED:
+            steps = ['pending_deposit', 'deposit_paid', 'cancelled']
+        elif final_status in ('out_for_delivery', 'delivered'):
+            steps = STATUS_FLOW + (['out_for_delivery'] if order.delivery_method == Order.DELIVERY else [])
+            if final_status == 'delivered':
+                steps.append('delivered')
+        else:
+            steps = STATUS_FLOW[:STATUS_FLOW.index(final_status) + 1]
+
+        prev = ''
+        for i, step in enumerate(steps):
+            entry = OrderStatusHistory.objects.create(
+                order=order,
+                from_status=prev,
+                to_status=step,
+                # La seña la confirma Mercado Pago (sin usuario); el resto, el admin
+                changed_by=admin if step not in ('pending_deposit', 'deposit_paid') else None,
+                notes='Pedido creado via checkout' if i == 0 else '',
+            )
+            OrderStatusHistory.objects.filter(pk=entry.pk).update(changed_at=created_at + timedelta(hours=3 * i))
+            prev = step

@@ -19,6 +19,7 @@ from .serializers import (
     CustomerPublicProfileUpdateSerializer,
     ReviewPublicSerializer, ReviewCreateSerializer, AdminReviewSerializer,
 )
+from users.permissions import IsTeamMember
 
 
 class IsCustomerUser(BasePermission):
@@ -197,7 +198,7 @@ class CustomerReviewCreateView(APIView):
 
 
 class AdminReviewViewSet(TenantFilterMixin, viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     serializer_class = AdminReviewSerializer
     http_method_names = ['get', 'patch', 'head', 'options']
     pagination_class = None
@@ -214,7 +215,7 @@ class AdminReviewViewSet(TenantFilterMixin, viewsets.ModelViewSet):
 
 
 class AdminCustomerViewSet(TenantFilterMixin, viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     queryset = (

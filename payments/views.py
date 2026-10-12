@@ -12,6 +12,7 @@ from tenants.models import Tenant
 from .models import PaymentIntent, WebhookEvent
 from .serializers import PaymentIntentSerializer, WebhookEventSerializer
 from .services import build_mp_preference, get_mp_sdk
+from users.permissions import IsTeamMember
 
 
 # ── Template views ────────────────────────────────────────────────────────────
@@ -231,7 +232,7 @@ class MercadoPagoWebhookView(APIView):
 # ── Admin ─────────────────────────────────────────────────────────────────────
 
 class AdminPaymentViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     serializer_class = PaymentIntentSerializer
     queryset = (
         PaymentIntent.objects
@@ -249,7 +250,7 @@ class AdminPaymentViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class AdminWebhookViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     serializer_class = WebhookEventSerializer
     queryset = WebhookEvent.objects.order_by('-created_at')
 

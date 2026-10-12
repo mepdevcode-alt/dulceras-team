@@ -42,3 +42,8 @@ class User(AbstractUser):
     @property
     def is_tenant_admin(self):
         return self.role == self.TENANT_ADMIN
+
+    @property
+    def is_team_member(self):
+        """Usuario del negocio o de la plataforma (puede usar el panel admin). Los clientes no."""
+        return self.role != self.CUSTOMER

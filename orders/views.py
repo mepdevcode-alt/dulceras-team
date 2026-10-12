@@ -31,6 +31,7 @@ from .serializers import (
     CouponSerializer, OrderCreateSerializer, OrderDetailSerializer,
     OrderListSerializer, OrderStatusUpdateSerializer,
 )
+from users.permissions import IsTeamMember
 
 ACTIVE_STATUSES = [
     Order.PENDING_DEPOSIT, Order.DEPOSIT_PAID, Order.CONFIRMED,
@@ -172,7 +173,7 @@ def _restore_stock(order):
 
 
 class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     http_method_names = ['get', 'patch', 'post', 'head', 'options']
 
     def get_queryset(self):
@@ -286,10 +287,7 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
     def messages(self, request, pk=None):
         from notifications import n8n
         from notifications.serializers import MessageDeliverySerializer, SendOrderMessageSerializer
-        from users.models import User
 
-        if request.user.role == User.CUSTOMER:
-            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
         order = self.get_object()
 
         if request.method == 'GET':
@@ -589,7 +587,7 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class AdminCouponViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     serializer_class = CouponSerializer
 
     def get_queryset(self):

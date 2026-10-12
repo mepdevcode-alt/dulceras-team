@@ -22,6 +22,7 @@
              body: JSON.stringify({ username: this.username, password: this.password })
            })
            const data = await res.json()
+           if (res.status === 403) { this.error = data.detail; return }
            if (!res.ok) throw new Error(data.detail || 'Error')
            $store.adminAuth.login(data.access, data.refresh, this.username)
            window.location.href = '/admin/dashboard/'

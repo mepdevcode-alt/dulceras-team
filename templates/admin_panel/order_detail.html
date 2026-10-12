@@ -134,7 +134,7 @@
       if (res.ok) { this.order = await res.json(); this.newStatus = '' }
     } catch {}
     this.statusLoading = false
-    // Pasar a "listo" o "cancelado" dispara un email automático
+    // Pasar a listo o cancelado dispara un email automático
     this.loadMessages()
   },
 
@@ -178,6 +178,9 @@
           <div class="flex justify-between text-sm font-semibold mt-2" style="color:#E285AF">
             <span>Seña (<span x-text="order?.deposit_percentage + '%'"></span>)</span>
             <span x-text="'$' + fmt(order?.deposit_amount)"></span>
+          </div>
+          <div class="flex justify-between text-sm text-brown-soft mt-1">
+            <span>Resto a pagar</span><span x-text="'$' + fmt(order?.balance_amount)"></span>
           </div>
         </div>
       </div>

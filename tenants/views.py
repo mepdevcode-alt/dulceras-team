@@ -14,6 +14,7 @@ from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 from datetime import timedelta
 from .models import BusinessProfile, Plan, Subscription, Tenant, DeliveryZone
+from users.permissions import IsTeamMember
 
 User = get_user_model()
 
@@ -433,7 +434,7 @@ class AdminDeliveryZoneSerializer(serializers.ModelSerializer):
 
 class AdminDeliveryZoneViewSet(viewsets.ModelViewSet):
     serializer_class = AdminDeliveryZoneSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
     pagination_class = None
 
     def get_queryset(self):
@@ -477,7 +478,7 @@ class TenantSettingsSerializer(serializers.Serializer):
 
 
 class TenantSettingsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
 
     def _get_tenant(self):
         user = self.request.user
@@ -561,7 +562,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 
 class BillingView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTeamMember]
 
     def _get_tenant(self):
         return self.request.user.tenant

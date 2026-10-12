@@ -54,7 +54,8 @@ document.addEventListener('alpine:init', () => {
     refresh:  localStorage.getItem('refresh_token'),
     username: localStorage.getItem('username'),
 
-    get isLoggedIn() { return !!this.token },
+    // Un token de cliente no da acceso al panel (la API responde 403): se trata como no logueado
+    get isLoggedIn() { return !!this.token && this.role !== 'customer' },
     get role() {
       if (!this.token) return null
       try {
