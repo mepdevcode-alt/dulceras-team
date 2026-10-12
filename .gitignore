@@ -47,3 +47,7 @@ server_err.log
 
 # Claude
 .claude/
+reporte
+
+# n8n: workflow original con datos personales (email, Sheet ID, chat de Telegram)
+n8n/workflows/pedidos_y_stock.json

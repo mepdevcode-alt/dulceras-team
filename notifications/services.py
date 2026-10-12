@@ -11,8 +11,14 @@ from urllib.parse import quote
 from django.conf import settings
 from django.utils import timezone
 
-from .models import Notification, WhatsAppLog
-from . import email_service
+from .models import MessageDelivery, Notification, WhatsAppLog
+from . import n8n
+
+# Cambios de estado que le mandan un email al cliente
+STATUS_TEMPLATES = {
+    'ready': MessageDelivery.ORDER_READY,
+    'cancelled': MessageDelivery.ORDER_CANCELLED,
+}
 
 
 def _normalize_phone(phone: str) -> str:
@@ -74,7 +80,7 @@ def notify_new_order(tenant, order):
     )
     _whatsapp_new_order(tenant, order)
     _whatsapp_order_received_customer(tenant, order)
-    email_service.send_order_confirmation(tenant, order)
+    n8n.send_order_event(tenant, order, n8n.ORDER_CREATED, MessageDelivery.ORDER_CREATED)
 
 
 def notify_payment_received(tenant, order, mp_payment_id=''):
@@ -91,7 +97,10 @@ def notify_payment_received(tenant, order, mp_payment_id=''):
     )
     _whatsapp_payment_received(tenant, order)
     _whatsapp_payment_confirmed_customer(tenant, order)
-    email_service.send_payment_confirmed(tenant, order)
+    n8n.send_order_event(
+        tenant, order, n8n.PAYMENT_RECEIVED, MessageDelivery.PAYMENT_RECEIVED,
+        payment={'mp_payment_id': str(mp_payment_id or '')},
+    )
 
 
 def notify_order_status(tenant, order, from_status, to_status, changed_by=None):
@@ -103,10 +112,10 @@ def notify_order_status(tenant, order, from_status, to_status, changed_by=None):
         f'Estado actualizado por {actor}: {from_status} → {to_status}.',
         order=order,
     )
-    if to_status == 'ready':
-        email_service.send_order_ready(tenant, order)
-    elif to_status == 'cancelled':
-        email_service.send_order_cancelled(tenant, order)
+    n8n.send_order_event(
+        tenant, order, n8n.ORDER_STATUS_CHANGED, STATUS_TEMPLATES.get(to_status),
+        from_status=from_status, to_status=to_status,
+    )
 
 
 # ── WhatsApp ──────────────────────────────────────────────────────────────────

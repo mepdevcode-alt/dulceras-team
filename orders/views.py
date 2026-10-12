@@ -282,6 +282,31 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response(OrderDetailSerializer(order).data)
 
+    @action(detail=True, methods=['get', 'post'], url_path='messages')
+    def messages(self, request, pk=None):
+        from notifications import n8n
+        from notifications.serializers import MessageDeliverySerializer, SendOrderMessageSerializer
+        from users.models import User
+
+        if request.user.role == User.CUSTOMER:
+            return Response({'detail': 'No autorizado.'}, status=status.HTTP_403_FORBIDDEN)
+        order = self.get_object()
+
+        if request.method == 'GET':
+            deliveries = order.message_deliveries.select_related('triggered_by')
+            return Response(MessageDeliverySerializer(deliveries, many=True).data)
+
+        serializer = SendOrderMessageSerializer(data=request.data, context={'order': order})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        delivery = n8n.send_order_event(
+            order.tenant, order, n8n.MESSAGE_REQUESTED, data['template'],
+            subject=data['subject'], message=data['message'],
+            triggered_by=request.user, resent_from=data.get('original'),
+        )
+        delivery.refresh_from_db()
+        return Response(MessageDeliverySerializer(delivery).data, status=status.HTTP_201_CREATED)
+
     def _get_tenant(self):
         user = self.request.user
         if user.is_platform_owner:

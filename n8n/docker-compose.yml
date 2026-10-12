@@ -1,0 +1,25 @@
+# n8n para notificaciones de pedidos. Corre solo en localhost del server:
+# Django le pega a http://127.0.0.1:5678/webhook/pedidos y el editor se usa por túnel SSH.
+# Ver n8n/README.md.
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"   # nunca exponer en 0.0.0.0
+    environment:
+      GENERIC_TIMEZONE: America/Argentina/Buenos_Aires
+      TZ: America/Argentina/Buenos_Aires
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://127.0.0.1:5678/
+      # El editor se abre por túnel SSH en http://localhost, sin HTTPS.
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

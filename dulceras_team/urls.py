@@ -10,7 +10,7 @@ from catalog.urls import public_urlpatterns as catalog_public, admin_urlpatterns
 from orders.urls import public_urlpatterns as orders_public, admin_urlpatterns as orders_admin, coupon_urlpatterns as coupons_admin, template_urlpatterns as orders_templates
 from customers.urls import admin_urlpatterns as customers_admin, admin_review_urlpatterns as reviews_admin, public_urlpatterns as customers_public
 from payments.urls import public_urlpatterns as payments_public, admin_urlpatterns as payments_admin, template_urlpatterns as payments_templates
-from notifications.urls import admin_urlpatterns as notifications_admin
+from notifications.urls import admin_urlpatterns as notifications_admin, n8n_urlpatterns
 from dulceras_team import pages
 
 public_patterns = [*tenants_public, *catalog_public, *orders_public, *payments_public, *customers_public]
@@ -74,6 +74,9 @@ urlpatterns = [
 
     # Superadmin (platform_owner only)
     path('api/superadmin/', include(superadmin_urlpatterns)),
+
+    # Callbacks de n8n (secreto compartido)
+    path('api/n8n/', include(n8n_urlpatterns)),
 ]
 
 if settings.DEBUG:

@@ -177,6 +177,17 @@ MERCADOPAGO_ACCESS_TOKEN = config('MERCADOPAGO_ACCESS_TOKEN', default='')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 WHATSAPP_PROVIDER_URL = config('WHATSAPP_PROVIDER_URL', default='')
 
+# n8n (notificaciones de pedidos). Vacío = apagado, se usan los emails de Django.
+# Debe apuntar a un n8n local (ej. http://127.0.0.1:5678/webhook/pedidos), no expuesto a internet.
+N8N_WEBHOOK_URL = config('N8N_WEBHOOK_URL', default='')
+N8N_WEBHOOK_SECRET = config('N8N_WEBHOOK_SECRET', default='')
+N8N_WEBHOOK_SECRET_HEADER = config('N8N_WEBHOOK_SECRET_HEADER', default='X-Webhook-Secret')
+N8N_TIMEOUT = config('N8N_TIMEOUT', default=5, cast=float)
+N8N_ASYNC = config('N8N_ASYNC', default=True, cast=bool)
+# Base URL con la que n8n llama de vuelta a Django para informar el estado de cada envío
+# (vacío = FRONTEND_URL). Ej. en local con n8n en Docker: http://host.docker.internal:8000
+N8N_CALLBACK_BASE_URL = config('N8N_CALLBACK_BASE_URL', default='')
+
 # Email
 _email_host = config('EMAIL_HOST', default='')
 EMAIL_BACKEND = (

@@ -6,6 +6,7 @@ Regla: nunca lanzar excepciones al caller — siempre silenciar y loggear.
 import logging
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.utils.html import escape
 
 logger = logging.getLogger(__name__)
 
@@ -71,22 +72,25 @@ def _items_table(order):
 
 
 def _send(to_email, subject, text_body, html_body, from_email=None):
+    """Devuelve True si el email se entregó al servidor SMTP."""
     if not to_email:
-        return
+        return False
     try:
         from_addr = from_email or settings.DEFAULT_FROM_EMAIL
         msg = EmailMultiAlternatives(subject, text_body, from_addr, [to_email])
         msg.attach_alternative(html_body, 'text/html')
         msg.send()
+        return True
     except Exception as exc:
         logger.exception('Error sending email to %s: %s', to_email, exc)
+        return False
 
 
 def send_order_confirmation(tenant, order):
     """Email al cliente cuando se crea su pedido (pending_deposit)."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
-        return
+        return False
 
     branding = _get_branding(tenant)
     date_str = order.required_date.strftime('%d/%m/%Y')
@@ -142,14 +146,14 @@ def send_order_confirmation(tenant, order):
     )
 
     html_body = _html_wrapper(branding, f'Tu pedido #{order.pk} fue recibido', body_html)
-    _send(email, f'Recibimos tu pedido #{order.pk} — {tenant.name}', text_body, html_body)
+    return _send(email, f'Recibimos tu pedido #{order.pk} — {tenant.name}', text_body, html_body)
 
 
 def send_payment_confirmed(tenant, order):
     """Email al cliente cuando la seña es aprobada."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
-        return
+        return False
 
     branding = _get_branding(tenant)
     date_str = order.required_date.strftime('%d/%m/%Y')
@@ -187,14 +191,14 @@ def send_payment_confirmed(tenant, order):
     )
 
     html_body = _html_wrapper(branding, f'¡Seña confirmada! Pedido #{order.pk}', body_html)
-    _send(email, f'¡Seña confirmada! Pedido #{order.pk} — {tenant.name}', text_body, html_body)
+    return _send(email, f'¡Seña confirmada! Pedido #{order.pk} — {tenant.name}', text_body, html_body)
 
 
 def send_order_ready(tenant, order):
     """Email al cliente cuando el pedido está listo."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
-        return
+        return False
 
     branding = _get_branding(tenant)
     is_delivery = order.delivery_method == 'delivery'
@@ -235,14 +239,14 @@ def send_order_ready(tenant, order):
     )
 
     html_body = _html_wrapper(branding, f'Tu pedido #{order.pk} está listo 🎁', body_html)
-    _send(email, f'¡Tu pedido #{order.pk} está listo! — {tenant.name}', text_body, html_body)
+    return _send(email, f'¡Tu pedido #{order.pk} está listo! — {tenant.name}', text_body, html_body)
 
 
 def send_order_cancelled(tenant, order):
     """Email al cliente cuando el pedido es cancelado."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
-        return
+        return False
 
     branding = _get_branding(tenant)
 
@@ -263,4 +267,25 @@ def send_order_cancelled(tenant, order):
     )
 
     html_body = _html_wrapper(branding, f'Pedido #{order.pk} cancelado', body_html)
-    _send(email, f'Pedido #{order.pk} cancelado — {tenant.name}', text_body, html_body)
+    return _send(email, f'Pedido #{order.pk} cancelado — {tenant.name}', text_body, html_body)
+
+
+def send_custom_message(tenant, order, subject, message):
+    """Email libre escrito por el admin desde el detalle del pedido."""
+    email = getattr(order.customer, 'email', '').strip()
+    if not email:
+        return False
+
+    branding = _get_branding(tenant)
+    paragraphs = ''.join(
+        f'<p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 12px;">{escape(line)}</p>'
+        for line in message.splitlines() if line.strip()
+    )
+    body_html = f"""
+    <p style="color:#555;margin:0 0 16px;">¡Hola <strong>{escape(order.customer.name)}</strong>!</p>
+    {paragraphs}
+    <p style="color:#999;font-size:13px;margin:16px 0 0;">Pedido #{order.pk}</p>"""
+
+    text_body = f"Hola {order.customer.name}!\n\n{message}\n\nPedido #{order.pk} — {tenant.name}"
+    html_body = _html_wrapper(branding, escape(subject), body_html)
+    return _send(email, f'{subject} — {tenant.name}', text_body, html_body)

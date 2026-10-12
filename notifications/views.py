@@ -1,10 +1,16 @@
+import hmac
+
+from django.conf import settings
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from catalog.views import TenantFilterMixin
-from .models import Notification, WhatsAppLog
+from .models import MessageDelivery, Notification, WhatsAppLog
 from .serializers import NotificationSerializer, WhatsAppLogSerializer
 
 
@@ -58,3 +64,39 @@ class WhatsAppLogViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
         if o := self.request.query_params.get('order'):
             qs = qs.filter(order_id=o)
         return qs
+
+
+class N8nDeliveryCallbackView(APIView):
+    """
+    n8n informa el resultado de un email: POST {status: 'sent'|'failed', error?}.
+    Autenticado con el mismo secreto compartido del webhook (N8N_WEBHOOK_SECRET).
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    FINAL = {MessageDelivery.SENT, MessageDelivery.FAILED}
+
+    def post(self, request, delivery_id):
+        secret = settings.N8N_WEBHOOK_SECRET
+        received = request.headers.get(settings.N8N_WEBHOOK_SECRET_HEADER, '')
+        if not secret or not hmac.compare_digest(received.encode(), secret.encode()):
+            return Response({'detail': 'No autorizado.'}, status=403)
+
+        new_status = request.data.get('status')
+        if new_status not in self.FINAL:
+            return Response({'detail': "status debe ser 'sent' o 'failed'."}, status=400)
+
+        delivery = get_object_or_404(MessageDelivery, pk=delivery_id)
+        fields = {
+            'status': new_status,
+            'provider': MessageDelivery.PROVIDER_N8N,
+            'error': str(request.data.get('error') or '')[:2000] if new_status == MessageDelivery.FAILED else '',
+            'updated_at': timezone.now(),
+        }
+        if new_status == MessageDelivery.SENT:
+            fields['sent_at'] = timezone.now()
+        # Solo envíos en curso: no pisar un resultado final (ej. fallback de Django).
+        updated = MessageDelivery.objects.filter(
+            pk=delivery.pk, status__in=[MessageDelivery.PENDING, MessageDelivery.QUEUED],
+        ).update(**fields)
+        return Response({'id': delivery.pk, 'updated': bool(updated)})

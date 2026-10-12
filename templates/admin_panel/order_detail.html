@@ -29,6 +29,29 @@
     cancelled: 'Cancelado',
   },
 
+  messages: [],
+  showSend: false,
+  sending: false,
+  sendError: '',
+  resendingId: null,
+  msgForm: { template: 'custom', subject: '', message: '' },
+  pollTimer: null,
+
+  MSG_TEMPLATES: [
+    { value: 'custom', label: 'Mensaje personalizado', statuses: null },
+    { value: 'order_created', label: 'Pedido recibido', statuses: null },
+    { value: 'payment_received', label: 'Seña confirmada', statuses: ['deposit_paid','confirmed','in_production','ready','out_for_delivery','delivered'] },
+    { value: 'order_ready', label: 'Pedido listo', statuses: ['ready'] },
+    { value: 'order_cancelled', label: 'Pedido cancelado', statuses: ['cancelled'] },
+  ],
+  MSG_STATUS_STYLES: {
+    pending: 'background:rgba(58,36,23,0.07);color:#5A3B29',
+    queued: 'background:#FFF4D6;color:#9A6B00',
+    sent: 'background:#E3F6EA;color:#1E8449',
+    failed: 'background:#FDE7E7;color:#C0392B',
+    skipped: 'background:rgba(58,36,23,0.07);color:#8A7262',
+  },
+
   async init() {
     try {
       const res = await fetch('/api/admin/orders/{{ order_id }}/', { headers: $store.adminAuth.headers() })
@@ -36,6 +59,67 @@
       if (res.ok) this.order = await res.json()
     } catch {}
     this.loading = false
+    this.loadMessages()
+  },
+
+  availableTemplates() {
+    return this.MSG_TEMPLATES.filter(t => !t.statuses || t.statuses.includes(this.order?.status))
+  },
+
+  async loadMessages(poll = 0) {
+    try {
+      const res = await fetch('/api/admin/orders/{{ order_id }}/messages/', { headers: $store.adminAuth.headers() })
+      if (res.ok) this.messages = await res.json()
+    } catch {}
+    // Mientras haya envíos en curso, refrescar hasta que n8n informe el resultado (máx. ~2 min)
+    clearTimeout(this.pollTimer)
+    if (poll < 30 && this.messages.some(m => m.status === 'pending' || m.status === 'queued')) {
+      this.pollTimer = setTimeout(() => this.loadMessages(poll + 1), 4000)
+    }
+  },
+
+  async postMessage(body) {
+    const res = await fetch('/api/admin/orders/{{ order_id }}/messages/', {
+      method: 'POST',
+      headers: $store.adminAuth.headers(),
+      body: JSON.stringify(body),
+    })
+    if (res.ok) return null
+    const data = await res.json().catch(() => ({}))
+    return Object.values(data).flat().join(' ') || 'No se pudo enviar el mensaje.'
+  },
+
+  async sendMessage() {
+    this.sending = true
+    this.sendError = ''
+    try {
+      const body = this.msgForm.template === 'custom'
+        ? { ...this.msgForm }
+        : { template: this.msgForm.template }
+      const err = await this.postMessage(body)
+      if (err) { this.sendError = err } else {
+        this.showSend = false
+        this.msgForm = { template: 'custom', subject: '', message: '' }
+      }
+    } catch { this.sendError = 'No se pudo enviar el mensaje.' }
+    this.sending = false
+    this.loadMessages()
+  },
+
+  async resend(m) {
+    this.resendingId = m.id
+    this.sendError = ''
+    try {
+      const err = await this.postMessage({ resend_of: m.id })
+      if (err) this.sendError = err
+    } catch {}
+    this.resendingId = null
+    this.loadMessages()
+  },
+
+  fmtDate(iso) {
+    if (!iso) return ''
+    return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
   },
 
   async updateStatus() {
@@ -50,6 +134,8 @@
       if (res.ok) { this.order = await res.json(); this.newStatus = '' }
     } catch {}
     this.statusLoading = false
+    // Pasar a "listo" o "cancelado" dispara un email automático
+    this.loadMessages()
   },
 
   fmt(n) { return Number(n||0).toLocaleString('es-AR') },
@@ -117,6 +203,79 @@
             <p class="font-medium text-brown" x-text="order?.notes"></p>
           </div>
         </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="bg-white rounded-2xl" style="border:1px solid rgba(58,36,23,0.07);box-shadow:0 2px 12px rgba(58,36,23,0.05);padding:20px 22px">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <h2 class="font-fraunces font-bold text-brown" style="font-size:1rem">Mensajes al cliente</h2>
+          <button @click="showSend = !showSend; sendError = ''"
+                  class="text-xs font-semibold rounded-xl px-3 py-1.5"
+                  style="background:rgba(226,133,175,0.12);color:#C2577F;border:none;cursor:pointer"
+                  x-text="showSend ? 'Cancelar' : 'Enviar mensaje'"></button>
+        </div>
+
+        <p x-show="order && !(order.customer_email ?? order.customer?.email)" class="text-xs mb-3" style="color:#C0392B">
+          El cliente no tiene email cargado: no se le pueden enviar mensajes.
+        </p>
+
+        <!-- Send form -->
+        <div x-show="showSend" class="rounded-xl mb-4" style="background:#FBF6EF;padding:14px">
+          <label class="block text-xs text-brown-soft uppercase tracking-wide mb-1">Plantilla</label>
+          <select x-model="msgForm.template"
+                  class="w-full rounded-xl text-sm outline-none mb-3"
+                  style="border:1.5px solid rgba(58,36,23,0.15);color:#3A2417;background:#fff;padding:9px 12px">
+            <template x-for="t in availableTemplates()" :key="t.value">
+              <option :value="t.value" x-text="t.label"></option>
+            </template>
+          </select>
+
+          <div x-show="msgForm.template === 'custom'">
+            <label class="block text-xs text-brown-soft uppercase tracking-wide mb-1">Asunto</label>
+            <input x-model="msgForm.subject" maxlength="200" type="text"
+                   class="w-full rounded-xl text-sm outline-none mb-3"
+                   style="border:1.5px solid rgba(58,36,23,0.15);color:#3A2417;background:#fff;padding:9px 12px">
+            <label class="block text-xs text-brown-soft uppercase tracking-wide mb-1">Mensaje</label>
+            <textarea x-model="msgForm.message" rows="4" maxlength="5000"
+                      class="w-full rounded-xl text-sm outline-none mb-3"
+                      style="border:1.5px solid rgba(58,36,23,0.15);color:#3A2417;background:#fff;padding:9px 12px;resize:vertical"></textarea>
+          </div>
+          <p x-show="msgForm.template !== 'custom'" class="text-xs text-brown-soft mb-3">
+            Se envía el mismo email automático de esa etapa, con los datos actuales del pedido.
+          </p>
+
+          <p x-show="sendError" x-text="sendError" class="text-xs mb-2" style="color:#C0392B"></p>
+          <button @click="sendMessage()" :disabled="sending"
+                  class="w-full text-sm font-semibold text-white rounded-xl py-2.5 disabled:opacity-50"
+                  style="background:linear-gradient(135deg,#F0A0C4,#E285AF);border:none;cursor:pointer"
+                  x-text="sending ? 'Enviando...' : 'Enviar al cliente'"></button>
+        </div>
+
+        <p x-show="!showSend && sendError" x-text="sendError" class="text-xs mb-2" style="color:#C0392B"></p>
+        <p x-show="messages.length === 0" class="text-sm text-brown-soft">Todavía no se enviaron mensajes.</p>
+
+        <template x-for="m in messages" :key="m.id">
+          <div class="flex items-start justify-between gap-3 py-3" style="border-top:1px solid rgba(58,36,23,0.07)">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm font-semibold text-brown" x-text="m.template === 'custom' ? m.subject : m.template_display"></span>
+                <span class="text-xs font-semibold rounded-full px-2 py-0.5" :style="MSG_STATUS_STYLES[m.status]" x-text="m.status_display"></span>
+              </div>
+              <p class="text-xs text-brown-soft mt-1">
+                <span x-text="fmtDate(m.created_at)"></span>
+                <span x-text="m.triggered_by_name ? ' · manual por ' + m.triggered_by_name : ' · automático'"></span>
+                <span x-show="m.provider" x-text="' · vía ' + m.provider"></span>
+                <span x-show="m.resent_from" x-text="' · reenvío'"></span>
+              </p>
+              <p x-show="m.error" class="text-xs mt-1" :style="m.status === 'failed' ? 'color:#C0392B' : 'color:#8A7262'" x-text="m.error"></p>
+            </div>
+            <button x-show="['sent','failed','queued'].includes(m.status)"
+                    @click="resend(m)" :disabled="resendingId === m.id"
+                    class="text-xs font-semibold rounded-xl px-3 py-1.5 shrink-0 disabled:opacity-50"
+                    style="background:rgba(58,36,23,0.06);color:#5A3B29;border:none;cursor:pointer"
+                    x-text="resendingId === m.id ? 'Enviando...' : 'Reenviar'"></button>
+          </div>
+        </template>
       </div>
     </div>
 
