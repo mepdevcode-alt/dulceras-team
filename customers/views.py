@@ -3,13 +3,11 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.generics import ListAPIView
-from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
+from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from catalog.views import TenantFilterMixin
-from tenants.models import Tenant
 from users.models import User
 from .models import Customer, CustomerAddress, Review
 from .serializers import (
@@ -41,14 +39,13 @@ def _customer_tokens(customer_user):
 class CustomerRegisterView(APIView):
     permission_classes = [AllowAny]
 
-    def post(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
+    def post(self, request):
         serializer = CustomerPublicRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         d = serializer.validated_data
 
-        # Email único por tenant
-        if User.objects.filter(email=d['email'], tenant=tenant, role=User.CUSTOMER).exists():
+        # El email es el username de la cuenta: tiene que ser único
+        if User.objects.filter(username=d['email']).exists():
             return Response({'email': ['Ya existe una cuenta con ese email.']}, status=400)
 
         # Crear usuario
@@ -57,13 +54,11 @@ class CustomerRegisterView(APIView):
             email=d['email'],
             password=d['password'],
             role=User.CUSTOMER,
-            tenant=tenant,
             first_name=d['name'].split()[0] if d['name'].split() else d['name'],
         )
 
         # Buscar Customer existente por teléfono o crear uno nuevo
         customer, _ = Customer.objects.get_or_create(
-            tenant=tenant,
             phone=d['phone'],
             defaults={'name': d['name'], 'email': d['email']},
         )
@@ -83,8 +78,7 @@ class CustomerRegisterView(APIView):
 class CustomerLoginView(APIView):
     permission_classes = [AllowAny]
 
-    def post(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
+    def post(self, request):
         email = (request.data.get('email', '') or '').strip()
         password = request.data.get('password', '')
 
@@ -92,8 +86,8 @@ class CustomerLoginView(APIView):
             return Response({'detail': 'Email y contraseña son requeridos.'}, status=400)
 
         try:
-            customer_user = User.objects.get(email=email, tenant=tenant, role=User.CUSTOMER)
-        except User.DoesNotExist:
+            customer_user = User.objects.get(email=email, role=User.CUSTOMER)
+        except (User.DoesNotExist, User.MultipleObjectsReturned):
             return Response({'detail': 'Credenciales incorrectas.'}, status=401)
 
         if not customer_user.check_password(password):
@@ -115,22 +109,12 @@ class CustomerLoginView(APIView):
 class CustomerProfileView(APIView):
     permission_classes = [IsCustomerUser]
 
-    def _get_customer(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-        if request.user.tenant != tenant:
-            return None
-        return get_object_or_404(Customer, user=request.user, tenant=tenant)
-
-    def get(self, request, tenant_slug):
-        customer = self._get_customer(request, tenant_slug)
-        if not customer:
-            return Response({'detail': 'No autorizado.'}, status=403)
+    def get(self, request):
+        customer = get_object_or_404(Customer, user=request.user)
         return Response(CustomerPublicProfileSerializer(customer).data)
 
-    def patch(self, request, tenant_slug):
-        customer = self._get_customer(request, tenant_slug)
-        if not customer:
-            return Response({'detail': 'No autorizado.'}, status=403)
+    def patch(self, request):
+        customer = get_object_or_404(Customer, user=request.user)
         serializer = CustomerPublicProfileUpdateSerializer(
             customer, data=request.data, partial=True
         )
@@ -142,17 +126,13 @@ class CustomerProfileView(APIView):
 class CustomerOrdersView(APIView):
     permission_classes = [IsCustomerUser]
 
-    def get(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-        if request.user.tenant != tenant:
-            return Response({'detail': 'No autorizado.'}, status=403)
-
+    def get(self, request):
         from orders.models import Order
         from orders.serializers import OrderListSerializer
 
         orders = (
             Order.objects
-            .filter(tenant=tenant, customer__user=request.user)
+            .filter(customer__user=request.user)
             .select_related('customer')
             .prefetch_related('items')
             .order_by('-created_at')
@@ -166,19 +146,13 @@ class ReviewListView(ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        from catalog.views import get_active_tenant
-        tenant = get_active_tenant(self.kwargs['tenant_slug'])
-        return Review.objects.filter(tenant=tenant, is_approved=True)
+        return Review.objects.filter(is_approved=True)
 
 
 class CustomerReviewCreateView(APIView):
     permission_classes = [IsCustomerUser]
 
-    def post(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-        if request.user.tenant != tenant:
-            return Response({'detail': 'No autorizado.'}, status=403)
-
+    def post(self, request):
         serializer = ReviewCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -188,7 +162,6 @@ class CustomerReviewCreateView(APIView):
             return Response({'detail': 'Sin perfil de cliente.'}, status=400)
 
         review = Review.objects.create(
-            tenant=tenant,
             customer=customer,
             author_name=customer.name,
             rating=serializer.validated_data['rating'],
@@ -197,7 +170,7 @@ class CustomerReviewCreateView(APIView):
         return Response(ReviewPublicSerializer(review).data, status=status.HTTP_201_CREATED)
 
 
-class AdminReviewViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class AdminReviewViewSet(viewsets.ModelViewSet):
     permission_classes = [IsTeamMember]
     serializer_class = AdminReviewSerializer
     http_method_names = ['get', 'patch', 'head', 'options']
@@ -214,7 +187,7 @@ class AdminReviewViewSet(TenantFilterMixin, viewsets.ModelViewSet):
         return Response(AdminReviewSerializer(review).data)
 
 
-class AdminCustomerViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class AdminCustomerViewSet(viewsets.ModelViewSet):
     permission_classes = [IsTeamMember]
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 

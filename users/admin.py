@@ -5,12 +5,12 @@ from .models import User
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ('username', 'email', 'role', 'tenant', 'is_active', 'is_staff')
-    list_filter = ('role', 'tenant', 'is_active', 'is_staff')
+    list_display = ('username', 'email', 'role', 'is_active', 'is_staff')
+    list_filter = ('role', 'is_active', 'is_staff')
     search_fields = ('username', 'email', 'first_name', 'last_name')
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('Dulceras', {'fields': ('tenant', 'role')}),
+        ('Dulceras', {'fields': ('role',)}),
     )
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
-        ('Dulceras', {'fields': ('tenant', 'role')}),
+        ('Dulceras', {'fields': ('role',)}),
     )

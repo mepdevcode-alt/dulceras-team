@@ -8,20 +8,18 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.utils.html import escape
 
+from tenants.models import BusinessProfile
+
 logger = logging.getLogger(__name__)
 
 
-def _get_branding(tenant):
-    try:
-        p = tenant.profile
-        return {
-            'name': tenant.name,
-            'primary': p.primary_color or '#3D1A0E',
-            'accent': p.accent_color or '#E8889A',
-            'bg': p.bg_color or '#FDF6EC',
-        }
-    except Exception:
-        return {'name': tenant.name, 'primary': '#3D1A0E', 'accent': '#E8889A', 'bg': '#FDF6EC'}
+def _get_branding(business):
+    return {
+        'name': business.name,
+        'primary': business.primary_color or '#3D1A0E',
+        'accent': business.accent_color or '#E8889A',
+        'bg': business.bg_color or '#FDF6EC',
+    }
 
 
 def _html_wrapper(branding, title, body_html):
@@ -86,13 +84,14 @@ def _send(to_email, subject, text_body, html_body, from_email=None):
         return False
 
 
-def send_order_confirmation(tenant, order):
+def send_order_confirmation(order):
     """Email al cliente cuando se crea su pedido (pending_deposit)."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
         return False
 
-    branding = _get_branding(tenant)
+    business = BusinessProfile.load()
+    branding = _get_branding(business)
     date_str = order.required_date.strftime('%d/%m/%Y')
     items_html = _items_table(order)
     frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
@@ -137,7 +136,7 @@ def send_order_confirmation(tenant, order):
 
     text_body = (
         f"Hola {order.customer.name}!\n\n"
-        f"Recibimos tu pedido #{order.pk} en {tenant.name}.\n"
+        f"Recibimos tu pedido #{order.pk} en {business.name}.\n"
         f"Fecha solicitada: {date_str}\n"
         f"Total: ${order.total:,.0f}\n"
         f"Seña ({int(order.deposit_percentage)}%): ${order.deposit_amount:,.0f}\n\n"
@@ -146,16 +145,17 @@ def send_order_confirmation(tenant, order):
     )
 
     html_body = _html_wrapper(branding, f'Tu pedido #{order.pk} fue recibido', body_html)
-    return _send(email, f'Recibimos tu pedido #{order.pk} — {tenant.name}', text_body, html_body)
+    return _send(email, f'Recibimos tu pedido #{order.pk} — {business.name}', text_body, html_body)
 
 
-def send_payment_confirmed(tenant, order):
+def send_payment_confirmed(order):
     """Email al cliente cuando la seña es aprobada."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
         return False
 
-    branding = _get_branding(tenant)
+    business = BusinessProfile.load()
+    branding = _get_branding(business)
     date_str = order.required_date.strftime('%d/%m/%Y')
 
     body_html = f"""
@@ -191,22 +191,20 @@ def send_payment_confirmed(tenant, order):
     )
 
     html_body = _html_wrapper(branding, f'¡Seña confirmada! Pedido #{order.pk}', body_html)
-    return _send(email, f'¡Seña confirmada! Pedido #{order.pk} — {tenant.name}', text_body, html_body)
+    return _send(email, f'¡Seña confirmada! Pedido #{order.pk} — {business.name}', text_body, html_body)
 
 
-def send_order_ready(tenant, order):
+def send_order_ready(order):
     """Email al cliente cuando el pedido está listo."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
         return False
 
-    branding = _get_branding(tenant)
+    business = BusinessProfile.load()
+    branding = _get_branding(business)
     is_delivery = order.delivery_method == 'delivery'
 
-    try:
-        address = tenant.profile.address or ''
-    except Exception:
-        address = ''
+    address = business.address or ''
 
     body_html = f"""
     <p style="color:#555;margin:0 0 16px;">¡Hola <strong>{order.customer.name}</strong>! 🎉</p>
@@ -239,16 +237,17 @@ def send_order_ready(tenant, order):
     )
 
     html_body = _html_wrapper(branding, f'Tu pedido #{order.pk} está listo 🎁', body_html)
-    return _send(email, f'¡Tu pedido #{order.pk} está listo! — {tenant.name}', text_body, html_body)
+    return _send(email, f'¡Tu pedido #{order.pk} está listo! — {business.name}', text_body, html_body)
 
 
-def send_order_cancelled(tenant, order):
+def send_order_cancelled(order):
     """Email al cliente cuando el pedido es cancelado."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
         return False
 
-    branding = _get_branding(tenant)
+    business = BusinessProfile.load()
+    branding = _get_branding(business)
 
     body_html = f"""
     <p style="color:#555;margin:0 0 16px;">Hola <strong>{order.customer.name}</strong>,</p>
@@ -263,20 +262,21 @@ def send_order_cancelled(tenant, order):
     text_body = (
         f"Hola {order.customer.name},\n\n"
         f"Tu pedido #{order.pk} fue cancelado.\n"
-        f"Si tenés preguntas, contactanos.\n\n{tenant.name}"
+        f"Si tenés preguntas, contactanos.\n\n{business.name}"
     )
 
     html_body = _html_wrapper(branding, f'Pedido #{order.pk} cancelado', body_html)
-    return _send(email, f'Pedido #{order.pk} cancelado — {tenant.name}', text_body, html_body)
+    return _send(email, f'Pedido #{order.pk} cancelado — {business.name}', text_body, html_body)
 
 
-def send_custom_message(tenant, order, subject, message):
+def send_custom_message(order, subject, message):
     """Email libre escrito por el admin desde el detalle del pedido."""
     email = getattr(order.customer, 'email', '').strip()
     if not email:
         return False
 
-    branding = _get_branding(tenant)
+    business = BusinessProfile.load()
+    branding = _get_branding(business)
     paragraphs = ''.join(
         f'<p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 12px;">{escape(line)}</p>'
         for line in message.splitlines() if line.strip()
@@ -286,6 +286,6 @@ def send_custom_message(tenant, order, subject, message):
     {paragraphs}
     <p style="color:#999;font-size:13px;margin:16px 0 0;">Pedido #{order.pk}</p>"""
 
-    text_body = f"Hola {order.customer.name}!\n\n{message}\n\nPedido #{order.pk} — {tenant.name}"
+    text_body = f"Hola {order.customer.name}!\n\n{message}\n\nPedido #{order.pk} — {business.name}"
     html_body = _html_wrapper(branding, escape(subject), body_html)
-    return _send(email, f'{subject} — {tenant.name}', text_body, html_body)
+    return _send(email, f'{subject} — {business.name}', text_body, html_body)

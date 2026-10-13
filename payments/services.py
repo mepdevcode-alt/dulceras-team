@@ -7,16 +7,15 @@ from django.conf import settings
 import mercadopago
 
 
-def get_mp_sdk(tenant=None):
+def get_mp_sdk():
     """Retorna el SDK de MP o None si no hay token configurado."""
-    # TODO: leer token por tenant cuando BusinessProfile tenga mp_access_token
     token = getattr(settings, 'MERCADOPAGO_ACCESS_TOKEN', '')
     if not token:
         return None
     return mercadopago.SDK(token)
 
 
-def build_mp_preference(payment_intent, tenant_slug, frontend_url, notification_url):
+def build_mp_preference(payment_intent, frontend_url, notification_url):
     order = payment_intent.order
     pref = {
         "items": [

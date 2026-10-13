@@ -1,9 +1,9 @@
 from django.conf import settings
 from django.db import models
-from core.models import TenantModel
+from core.models import TimeStampedModel
 
 
-class Notification(TenantModel):
+class Notification(TimeStampedModel):
     NEW_ORDER = 'new_order'
     PAYMENT_RECEIVED = 'payment_received'
     ORDER_STATUS = 'order_status'
@@ -26,6 +26,7 @@ class Notification(TenantModel):
     )
 
     class Meta:
+        db_table = 'notificaciones'
         ordering = ['-created_at']
         verbose_name = 'Notificación'
         verbose_name_plural = 'Notificaciones'
@@ -34,7 +35,7 @@ class Notification(TenantModel):
         return f"{self.get_type_display()} — {self.recipient}"
 
 
-class WhatsAppLog(TenantModel):
+class WhatsAppLog(TimeStampedModel):
     phone = models.CharField(max_length=50)
     message = models.TextField()
     order = models.ForeignKey(
@@ -45,6 +46,7 @@ class WhatsAppLog(TenantModel):
     error = models.TextField(blank=True)
 
     class Meta:
+        db_table = 'registros_whatsapp'
         verbose_name = 'Log WhatsApp'
         verbose_name_plural = 'Logs WhatsApp'
 
@@ -52,7 +54,7 @@ class WhatsAppLog(TenantModel):
         return f"WA {self.phone} — {'OK' if self.sent else 'FALLIDO'}"
 
 
-class MessageDelivery(TenantModel):
+class MessageDelivery(TimeStampedModel):
     """Registro de cada mensaje enviado al cliente de un pedido (vía n8n o Django)."""
 
     ORDER_CREATED = 'order_created'
@@ -108,6 +110,7 @@ class MessageDelivery(TenantModel):
     sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        db_table = 'envios_mensajes'
         ordering = ['-created_at']
         verbose_name = 'Envío de mensaje'
         verbose_name_plural = 'Envíos de mensajes'

@@ -5,11 +5,10 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from catalog.views import TenantFilterMixin
 from .models import MessageDelivery, Notification, WhatsAppLog
 from .serializers import NotificationSerializer, WhatsAppLogSerializer
 from users.permissions import IsTeamMember
@@ -18,7 +17,7 @@ from users.permissions import IsTeamMember
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Notificaciones personales del usuario autenticado (la campanita).
-    Cada usuario solo ve las suyas — no usa TenantFilterMixin.
+    Cada usuario solo ve las suyas.
     """
     permission_classes = [IsTeamMember]
     serializer_class = NotificationSerializer
@@ -52,7 +51,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'marked_read': updated})
 
 
-class WhatsAppLogViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
+class WhatsAppLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Log de mensajes WhatsApp enviados — solo lectura para admins."""
     permission_classes = [IsTeamMember]
     serializer_class = WhatsAppLogSerializer

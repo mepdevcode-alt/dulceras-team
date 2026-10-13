@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 from catalog.models import Category, Product, ProductVariant
 from customers.models import Customer
 from orders.models import Order, OrderItem
-from tenants.models import Tenant
+from tenants.models import BusinessProfile
 from users.models import User
 
 from . import services
@@ -25,17 +25,14 @@ N8N_ON = dict(
 
 class OrderFixtureMixin:
     def setUp(self):
-        self.tenant = Tenant.objects.create(name='Pastelería Test', slug='pasteleria-test')
-        category = Category.objects.create(tenant=self.tenant, name='Tortas', slug='tortas')
-        product = Product.objects.create(tenant=self.tenant, category=category, name='Torta')
-        variant = ProductVariant.objects.create(
-            tenant=self.tenant, product=product, name='Grande', price=1000,
+        BusinessProfile.objects.create(name='Pastelería Test')
+        category = Category.objects.create( name='Tortas', slug='tortas')
+        product = Product.objects.create( category=category, name='Torta')
+        variant = ProductVariant.objects.create( product=product, name='Grande', price=1000,
         )
-        self.customer = Customer.objects.create(
-            tenant=self.tenant, name='Ana', email='ana@example.com',
+        self.customer = Customer.objects.create( name='Ana', email='ana@example.com',
         )
-        self.order = Order.objects.create(
-            tenant=self.tenant, customer=self.customer, status=Order.PENDING_DEPOSIT,
+        self.order = Order.objects.create( customer=self.customer, status=Order.PENDING_DEPOSIT,
             required_date=datetime.date(2026, 12, 1),
             subtotal=2000, total=2000, deposit_amount=1000, balance_amount=1000,
         )
@@ -51,7 +48,7 @@ class OrderFixtureMixin:
 class AutomaticEventsTests(OrderFixtureMixin, TestCase):
     def _notify_new_order(self):
         with self.captureOnCommitCallbacks(execute=True):
-            services.notify_new_order(self.tenant, self.order)
+            services.notify_new_order(self.order)
 
     @override_settings(N8N_WEBHOOK_URL='')
     @mock.patch('notifications.n8n.requests.post')
@@ -73,7 +70,7 @@ class AutomaticEventsTests(OrderFixtureMixin, TestCase):
         payload = kwargs['json']
         d = self.last_delivery()
         self.assertEqual(payload['event'], 'order_created')
-        self.assertEqual(payload['tenant']['name'], 'Pastelería Test')
+        self.assertEqual(payload['business']['name'], 'Pastelería Test')
         self.assertEqual(payload['order']['items'][0]['quantity'], 2)
         self.assertEqual(payload['delivery']['id'], d.pk)
         self.assertEqual(payload['delivery']['template'], MessageDelivery.ORDER_CREATED)
@@ -106,7 +103,7 @@ class AutomaticEventsTests(OrderFixtureMixin, TestCase):
     @mock.patch('notifications.n8n.requests.post')
     def test_payment_received_includes_payment_id(self, post):
         with self.captureOnCommitCallbacks(execute=True):
-            services.notify_payment_received(self.tenant, self.order, mp_payment_id='123')
+            services.notify_payment_received(self.order, mp_payment_id='123')
         payload = post.call_args.kwargs['json']
         self.assertEqual(payload['event'], 'payment_received')
         self.assertEqual(payload['payment'], {'mp_payment_id': '123'})
@@ -116,7 +113,7 @@ class AutomaticEventsTests(OrderFixtureMixin, TestCase):
     def test_status_without_email_creates_no_delivery(self, post):
         with self.captureOnCommitCallbacks(execute=True):
             services.notify_order_status(
-                self.tenant, self.order, Order.DEPOSIT_PAID, Order.IN_PRODUCTION,
+                self.order, Order.DEPOSIT_PAID, Order.IN_PRODUCTION,
             )
         payload = post.call_args.kwargs['json']
         self.assertEqual(payload['to_status'], Order.IN_PRODUCTION)
@@ -129,7 +126,7 @@ class AutomaticEventsTests(OrderFixtureMixin, TestCase):
     def test_status_without_email_and_n8n_off_does_nothing(self, post):
         with self.captureOnCommitCallbacks(execute=True):
             services.notify_order_status(
-                self.tenant, self.order, Order.DEPOSIT_PAID, Order.IN_PRODUCTION,
+                self.order, Order.DEPOSIT_PAID, Order.IN_PRODUCTION,
             )
         post.assert_not_called()
         self.assertFalse(MessageDelivery.objects.exists())
@@ -139,8 +136,7 @@ class AutomaticEventsTests(OrderFixtureMixin, TestCase):
 class CallbackTests(OrderFixtureMixin, TestCase):
     def setUp(self):
         super().setUp()
-        self.delivery = MessageDelivery.objects.create(
-            tenant=self.tenant, order=self.order, template=MessageDelivery.ORDER_CREATED,
+        self.delivery = MessageDelivery.objects.create( order=self.order, template=MessageDelivery.ORDER_CREATED,
             recipient='ana@example.com', status=MessageDelivery.QUEUED,
         )
         self.url = f'/api/n8n/deliveries/{self.delivery.pk}/status/'
@@ -181,7 +177,7 @@ class AdminMessagesApiTests(OrderFixtureMixin, TestCase):
     def setUp(self):
         super().setUp()
         self.admin = User.objects.create_user(
-            username='admin-test', password='x', tenant=self.tenant, role=User.TENANT_ADMIN,
+            username='admin-test', password='x', role=User.ADMIN,
         )
         self.client = APIClient()
         self.client.force_authenticate(self.admin)
@@ -212,8 +208,7 @@ class AdminMessagesApiTests(OrderFixtureMixin, TestCase):
         post.assert_not_called()
 
     def test_resend_copies_original(self, post):
-        original = MessageDelivery.objects.create(
-            tenant=self.tenant, order=self.order, template=MessageDelivery.CUSTOM,
+        original = MessageDelivery.objects.create( order=self.order, template=MessageDelivery.CUSTOM,
             subject='Asunto', message='Texto', recipient='ana@example.com',
             status=MessageDelivery.FAILED,
         )
@@ -229,15 +224,8 @@ class AdminMessagesApiTests(OrderFixtureMixin, TestCase):
         self.assertEqual(res.json()[0]['template'], 'order_created')
         self.assertEqual(res.json()[0]['triggered_by_name'], 'admin-test')
 
-    def test_other_tenant_cannot_access(self, post):
-        other = Tenant.objects.create(name='Otro', slug='otro')
-        user = User.objects.create_user(username='otro', password='x', tenant=other,
-                                        role=User.TENANT_ADMIN)
-        self.client.force_authenticate(user)
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-
     def test_customer_role_forbidden(self, post):
-        user = User.objects.create_user(username='cli', password='x', tenant=self.tenant,
+        user = User.objects.create_user(username='cli', password='x',
                                         role=User.CUSTOMER)
         self.client.force_authenticate(user)
         self.assertEqual(self.client.get(self.url).status_code, 403)

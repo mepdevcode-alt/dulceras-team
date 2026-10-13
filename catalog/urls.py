@@ -7,9 +7,9 @@ from .views import (
 
 # ── Public ────────────────────────────────────────────────────────────────────
 public_urlpatterns = [
-    path('<slug:tenant_slug>/categories/', PublicCategoryListView.as_view(), name='public-categories'),
-    path('<slug:tenant_slug>/products/', PublicProductListView.as_view(), name='public-products'),
-    path('<slug:tenant_slug>/products/<int:pk>/', PublicProductDetailView.as_view(), name='public-product-detail'),
+    path('categories/', PublicCategoryListView.as_view(), name='public-categories'),
+    path('products/', PublicProductListView.as_view(), name='public-products'),
+    path('products/<int:pk>/', PublicProductDetailView.as_view(), name='public-product-detail'),
 ]
 
 # ── Admin ─────────────────────────────────────────────────────────────────────

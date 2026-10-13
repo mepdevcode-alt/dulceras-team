@@ -68,7 +68,6 @@
 (function () {
   const params   = new URLSearchParams(location.search)
   const orderId  = params.get('order_id')
-  const tenant   = window.DULCERAS.tenant
 
   // Rellena los spans con el número de pedido
   document.querySelectorAll('.order-id-placeholder').forEach(el => el.textContent = orderId || '?')
@@ -88,7 +87,7 @@
   let attempts = 0
   async function checkStatus() {
     try {
-      const res  = await fetch(`/api/public/${tenant}/payments/orders/${orderId}/status/`)
+      const res  = await fetch(`/api/public/payments/orders/${orderId}/status/`)
       const data = await res.json()
       if (data.status === 'approved') {
         show('state-approved')

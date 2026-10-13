@@ -10,16 +10,16 @@ class ProductVariantInline(admin.TabularInline):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'tenant', 'slug', 'is_active')
-    list_filter = ('tenant', 'is_active')
+    list_display = ('name', 'slug', 'is_active')
+    list_filter = ('is_active',)
     search_fields = ('name',)
     prepopulated_fields = {'slug': ('name',)}
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'tenant', 'category', 'is_active', 'requires_advance_hours', 'sort_order')
-    list_filter = ('tenant', 'category', 'is_active')
+    list_display = ('name', 'category', 'is_active', 'requires_advance_hours', 'sort_order')
+    list_filter = ('category', 'is_active')
     search_fields = ('name', 'description')
     inlines = [ProductVariantInline]
 
@@ -27,5 +27,5 @@ class ProductAdmin(admin.ModelAdmin):
 @admin.register(ProductVariant)
 class ProductVariantAdmin(admin.ModelAdmin):
     list_display = ('product', 'name', 'price', 'stock_quantity', 'is_active')
-    list_filter = ('tenant', 'is_active', 'product')
+    list_filter = ('is_active', 'product')
     search_fields = ('name', 'product__name')

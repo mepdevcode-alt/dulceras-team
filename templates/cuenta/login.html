@@ -15,7 +15,7 @@
          this.error = ''
          this.loading = true
          try {
-           const res = await fetch('/api/public/{{ tenant_slug }}/customers/login/', {
+           const res = await fetch('/api/public/customers/login/', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ email: this.email, password: this.password })

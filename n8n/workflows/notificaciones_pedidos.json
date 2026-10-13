@@ -8,7 +8,7 @@
         "authentication": "headerAuth",
         "options": {}
       },
-      "id": "d1cec521-621e-40d9-82a6-7b85e9a248bf",
+      "id": "1ae6449b-468f-4170-a5fc-06f70beceacd",
       "name": "Webhook Django",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -16,13 +16,13 @@
         0,
         200
       ],
-      "webhookId": "b5ba1eee-faed-43d6-9136-ac484728112e"
+      "webhookId": "6bffd1eb-ff5b-4857-9390-19ed6c39bc14"
     },
     {
       "parameters": {
-        "jsCode": "// Arma el email al cliente según la plantilla del envío registrado en Django.\n// Devuelve [] cuando el evento no lleva email (ej. pasa a \"en producción\").\nconst d = $input.first().json.body ?? {};\nconst t = d.tenant ?? {};\nconst o = d.order ?? {};\nconst c = d.customer ?? {};\nconst delivery = d.delivery;\nif (!delivery || !delivery.recipient) return [];\n\nconst esc = s => String(s ?? '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[ch]));\nconst money = n => '$' + Math.round(Number(n ?? 0)).toLocaleString('es-AR');\nconst primary = t.primary_color || '#3D1A0E';\nconst accent = t.accent_color || '#E8889A';\nconst bg = t.bg_color || '#FDF6EC';\nconst button = (href, label) => href ? `\n  <tr><td align=\"center\" style=\"padding:0 32px 28px;\">\n    <a href=\"${esc(href)}\" style=\"background:${accent};color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:999px;font-weight:bold;font-size:15px;display:inline-block;\">${label}</a>\n  </td></tr>` : '';\n\nlet subject, title, intro, badge, cta = '';\nswitch (delivery.template) {\n  case 'order_created':\n    subject = `Recibimos tu pedido #${o.id}`;\n    title = '¡Recibimos tu pedido! 🍰';\n    badge = 'Esperando seña';\n    intro = `Para confirmarlo necesitamos que abones la seña de <strong>${money(o.deposit_amount)}</strong>.`;\n    cta = button(o.url, 'Pagar seña →');\n    break;\n  case 'payment_received':\n    subject = `¡Seña confirmada! Pedido #${o.id}`;\n    title = '¡Tu pedido está confirmado! 🎉';\n    badge = '✓ Seña pagada';\n    intro = `Recibimos tu seña de <strong>${money(o.deposit_amount)}</strong>. Ya estamos preparando tu pedido y te avisamos cuando esté listo.`;\n    break;\n  case 'order_ready':\n    subject = `¡Tu pedido #${o.id} está listo!`;\n    title = '¡Tu pedido está listo! 🎂';\n    badge = '✓ Listo';\n    intro = o.delivery_method === 'delivery'\n      ? 'Tu pedido ya está listo y en breve sale para tu domicilio.'\n      : 'Tu pedido ya está listo. ¡Podés pasar a retirarlo!';\n    intro += ` Resto a pagar: <strong>${money(o.balance_amount)}</strong>.`;\n    break;\n  case 'order_cancelled':\n    subject = `Pedido #${o.id} cancelado`;\n    title = 'Tu pedido fue cancelado';\n    badge = 'Cancelado';\n    intro = 'Lamentamos informarte que tu pedido fue cancelado. Si tenés dudas, respondé este mail o escribinos.';\n    break;\n  case 'custom':\n    // Mensaje libre escrito por el admin desde el panel\n    subject = String(delivery.subject ?? '').trim() || `Novedades de tu pedido #${o.id}`;\n    title = esc(subject);\n    badge = esc(o.status_display);\n    intro = String(delivery.message ?? '').split('\\n').filter(l => l.trim()).map(esc).join('<br>');\n    break;\n  default:\n    return [];\n}\n\nconst row = (label, value, strong = false) => `\n  <tr>\n    <td style=\"padding:10px 0;border-bottom:1px solid #f0e5e1;color:#746a68;font-size:14px;\">${label}</td>\n    <td align=\"right\" style=\"padding:10px 0;border-bottom:1px solid #f0e5e1;font-size:14px;${strong ? 'font-weight:bold;' : ''}\">${value}</td>\n  </tr>`;\n\nconst items = (o.items ?? []).map(i =>\n  row(`${esc(i.quantity)}x ${esc(i.product_name)}${i.variant_name ? ' — ' + esc(i.variant_name) : ''}`, money(i.subtotal), true)\n).join('');\n\nconst totals = [\n  o.delivery_cost ? row('Envío', money(o.delivery_cost)) : '',\n  o.discount_amount ? row(`Descuento${o.coupon_code ? ' (' + esc(o.coupon_code) + ')' : ''}`, '-' + money(o.discount_amount)) : '',\n  row('<strong>Total</strong>', money(o.total), true),\n  row(`Seña (${Math.round(o.deposit_percentage ?? 0)}%)`, money(o.deposit_amount)),\n  row('Resto a pagar', money(o.balance_amount)),\n].join('');\n\nconst contact = [t.whatsapp && `WhatsApp ${esc(t.whatsapp)}`, t.instagram && `Instagram ${esc(t.instagram)}`, t.email && esc(t.email)]\n  .filter(Boolean).join(' · ');\n\nconst notes = String(o.notes ?? '').trim();\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>\n<body style=\"margin:0;padding:0;background:${bg};font-family:Arial,Helvetica,sans-serif;color:#342a29;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:${bg};\">\n<tr><td align=\"center\" style=\"padding:32px 16px;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#ffffff;border:1px solid #f4dfd8;border-radius:16px;\">\n  <tr><td align=\"center\" style=\"padding:32px 28px;background:${primary};border-radius:16px 16px 0 0;\">\n    ${t.logo_url ? `<img src=\"${esc(t.logo_url)}\" alt=\"${esc(t.name)}\" height=\"56\" style=\"display:block;margin:0 auto 12px;\">` : ''}\n    <p style=\"margin:0 0 8px;color:#ffffff;opacity:.85;font-size:13px;font-weight:bold;letter-spacing:3px;\">${esc(String(t.name ?? '').toUpperCase())}</p>\n    <h1 style=\"margin:0;color:#ffffff;font-size:26px;line-height:1.3;\">${title}</h1>\n  </td></tr>\n  <tr><td style=\"padding:30px 32px 18px;\">\n    <p style=\"margin:0 0 12px;font-size:18px;\">Hola, <strong>${esc(c.name)}</strong> 👋</p>\n    <p style=\"margin:0;color:#655a58;font-size:15px;line-height:1.7;\">${intro}</p>\n  </td></tr>\n  <tr><td style=\"padding:8px 32px 24px;\">\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:${bg};border-radius:12px;\">\n      <tr>\n        <td style=\"padding:18px;\"><span style=\"color:#8b7370;font-size:12px;\">NÚMERO DE PEDIDO</span><br>\n          <strong style=\"color:${primary};font-size:24px;\">#${esc(o.id)}</strong></td>\n        <td align=\"right\" style=\"padding:18px;color:${primary};font-size:14px;font-weight:bold;\">${badge}</td>\n      </tr>\n      <tr><td colspan=\"2\" style=\"padding:0 18px 18px;color:#655a58;font-size:14px;\">\n        📅 ${esc(o.delivery_method_display)} — <strong>${esc(o.required_date_display)}</strong></td></tr>\n    </table>\n  </td></tr>\n  <tr><td style=\"padding:0 32px 26px;\">\n    <h2 style=\"margin:0 0 12px;color:${primary};font-size:18px;\">Detalle del pedido</h2>\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">${items}${totals}</table>\n  </td></tr>\n  ${notes ? `<tr><td style=\"padding:0 32px 28px;\">\n    <h2 style=\"margin:0 0 10px;color:${primary};font-size:18px;\">Comentarios de tu pedido</h2>\n    <div style=\"padding:16px;background:${bg};border-left:4px solid ${accent};border-radius:5px;color:#584b49;font-size:14px;line-height:1.6;\">${esc(notes)}</div>\n  </td></tr>` : ''}\n  ${cta}\n  <tr><td style=\"padding:22px 32px;background:#fffaf8;border-top:1px solid #f4e8e3;border-radius:0 0 16px 16px;\">\n    <p style=\"margin:0 0 6px;color:${primary};font-weight:bold;\">¡Gracias por elegir ${esc(t.name)}! 💗</p>\n    <p style=\"margin:0;color:#827674;font-size:13px;line-height:1.5;\">Conservá el número #${esc(o.id)} como referencia de tu pedido.${contact ? '<br>' + contact : ''}</p>\n  </td></tr>\n</table>\n</td></tr></table>\n</body></html>`;\n\nreturn [{ json: {\n  to: delivery.recipient,\n  subject: `${subject} — ${t.name}`,\n  html,\n  delivery_id: delivery.id,\n  callback_url: delivery.callback_url,\n} }];\n"
+        "jsCode": "// Arma el email al cliente según la plantilla del envío registrado en Django.\n// Devuelve [] cuando el evento no lleva email (ej. pasa a \"en producción\").\nconst d = $input.first().json.body ?? {};\nconst t = d.business ?? {};\nconst o = d.order ?? {};\nconst c = d.customer ?? {};\nconst delivery = d.delivery;\nif (!delivery || !delivery.recipient) return [];\n\nconst esc = s => String(s ?? '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[ch]));\nconst money = n => '$' + Math.round(Number(n ?? 0)).toLocaleString('es-AR');\nconst primary = t.primary_color || '#3D1A0E';\nconst accent = t.accent_color || '#E8889A';\nconst bg = t.bg_color || '#FDF6EC';\nconst button = (href, label) => href ? `\n  <tr><td align=\"center\" style=\"padding:0 32px 28px;\">\n    <a href=\"${esc(href)}\" style=\"background:${accent};color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:999px;font-weight:bold;font-size:15px;display:inline-block;\">${label}</a>\n  </td></tr>` : '';\n\nlet subject, title, intro, badge, cta = '';\nswitch (delivery.template) {\n  case 'order_created':\n    subject = `Recibimos tu pedido #${o.id}`;\n    title = '¡Recibimos tu pedido! 🍰';\n    badge = 'Esperando seña';\n    intro = `Para confirmarlo necesitamos que abones la seña de <strong>${money(o.deposit_amount)}</strong>.`;\n    cta = button(o.url, 'Pagar seña →');\n    break;\n  case 'payment_received':\n    subject = `¡Seña confirmada! Pedido #${o.id}`;\n    title = '¡Tu pedido está confirmado! 🎉';\n    badge = '✓ Seña pagada';\n    intro = `Recibimos tu seña de <strong>${money(o.deposit_amount)}</strong>. Ya estamos preparando tu pedido y te avisamos cuando esté listo.`;\n    break;\n  case 'order_ready':\n    subject = `¡Tu pedido #${o.id} está listo!`;\n    title = '¡Tu pedido está listo! 🎂';\n    badge = '✓ Listo';\n    intro = o.delivery_method === 'delivery'\n      ? 'Tu pedido ya está listo y en breve sale para tu domicilio.'\n      : 'Tu pedido ya está listo. ¡Podés pasar a retirarlo!';\n    intro += ` Resto a pagar: <strong>${money(o.balance_amount)}</strong>.`;\n    break;\n  case 'order_cancelled':\n    subject = `Pedido #${o.id} cancelado`;\n    title = 'Tu pedido fue cancelado';\n    badge = 'Cancelado';\n    intro = 'Lamentamos informarte que tu pedido fue cancelado. Si tenés dudas, respondé este mail o escribinos.';\n    break;\n  case 'custom':\n    // Mensaje libre escrito por el admin desde el panel\n    subject = String(delivery.subject ?? '').trim() || `Novedades de tu pedido #${o.id}`;\n    title = esc(subject);\n    badge = esc(o.status_display);\n    intro = String(delivery.message ?? '').split('\\n').filter(l => l.trim()).map(esc).join('<br>');\n    break;\n  default:\n    return [];\n}\n\nconst row = (label, value, strong = false) => `\n  <tr>\n    <td style=\"padding:10px 0;border-bottom:1px solid #f0e5e1;color:#746a68;font-size:14px;\">${label}</td>\n    <td align=\"right\" style=\"padding:10px 0;border-bottom:1px solid #f0e5e1;font-size:14px;${strong ? 'font-weight:bold;' : ''}\">${value}</td>\n  </tr>`;\n\nconst items = (o.items ?? []).map(i =>\n  row(`${esc(i.quantity)}x ${esc(i.product_name)}${i.variant_name ? ' — ' + esc(i.variant_name) : ''}`, money(i.subtotal), true)\n).join('');\n\nconst totals = [\n  o.delivery_cost ? row('Envío', money(o.delivery_cost)) : '',\n  o.discount_amount ? row(`Descuento${o.coupon_code ? ' (' + esc(o.coupon_code) + ')' : ''}`, '-' + money(o.discount_amount)) : '',\n  row('<strong>Total</strong>', money(o.total), true),\n  row(`Seña (${Math.round(o.deposit_percentage ?? 0)}%)`, money(o.deposit_amount)),\n  row('Resto a pagar', money(o.balance_amount)),\n].join('');\n\nconst contact = [t.whatsapp && `WhatsApp ${esc(t.whatsapp)}`, t.instagram && `Instagram ${esc(t.instagram)}`, t.email && esc(t.email)]\n  .filter(Boolean).join(' · ');\n\nconst notes = String(o.notes ?? '').trim();\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>\n<body style=\"margin:0;padding:0;background:${bg};font-family:Arial,Helvetica,sans-serif;color:#342a29;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:${bg};\">\n<tr><td align=\"center\" style=\"padding:32px 16px;\">\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#ffffff;border:1px solid #f4dfd8;border-radius:16px;\">\n  <tr><td align=\"center\" style=\"padding:32px 28px;background:${primary};border-radius:16px 16px 0 0;\">\n    ${t.logo_url ? `<img src=\"${esc(t.logo_url)}\" alt=\"${esc(t.name)}\" height=\"56\" style=\"display:block;margin:0 auto 12px;\">` : ''}\n    <p style=\"margin:0 0 8px;color:#ffffff;opacity:.85;font-size:13px;font-weight:bold;letter-spacing:3px;\">${esc(String(t.name ?? '').toUpperCase())}</p>\n    <h1 style=\"margin:0;color:#ffffff;font-size:26px;line-height:1.3;\">${title}</h1>\n  </td></tr>\n  <tr><td style=\"padding:30px 32px 18px;\">\n    <p style=\"margin:0 0 12px;font-size:18px;\">Hola, <strong>${esc(c.name)}</strong> 👋</p>\n    <p style=\"margin:0;color:#655a58;font-size:15px;line-height:1.7;\">${intro}</p>\n  </td></tr>\n  <tr><td style=\"padding:8px 32px 24px;\">\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:${bg};border-radius:12px;\">\n      <tr>\n        <td style=\"padding:18px;\"><span style=\"color:#8b7370;font-size:12px;\">NÚMERO DE PEDIDO</span><br>\n          <strong style=\"color:${primary};font-size:24px;\">#${esc(o.id)}</strong></td>\n        <td align=\"right\" style=\"padding:18px;color:${primary};font-size:14px;font-weight:bold;\">${badge}</td>\n      </tr>\n      <tr><td colspan=\"2\" style=\"padding:0 18px 18px;color:#655a58;font-size:14px;\">\n        📅 ${esc(o.delivery_method_display)} — <strong>${esc(o.required_date_display)}</strong></td></tr>\n    </table>\n  </td></tr>\n  <tr><td style=\"padding:0 32px 26px;\">\n    <h2 style=\"margin:0 0 12px;color:${primary};font-size:18px;\">Detalle del pedido</h2>\n    <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">${items}${totals}</table>\n  </td></tr>\n  ${notes ? `<tr><td style=\"padding:0 32px 28px;\">\n    <h2 style=\"margin:0 0 10px;color:${primary};font-size:18px;\">Comentarios de tu pedido</h2>\n    <div style=\"padding:16px;background:${bg};border-left:4px solid ${accent};border-radius:5px;color:#584b49;font-size:14px;line-height:1.6;\">${esc(notes)}</div>\n  </td></tr>` : ''}\n  ${cta}\n  <tr><td style=\"padding:22px 32px;background:#fffaf8;border-top:1px solid #f4e8e3;border-radius:0 0 16px 16px;\">\n    <p style=\"margin:0 0 6px;color:${primary};font-weight:bold;\">¡Gracias por elegir ${esc(t.name)}! 💗</p>\n    <p style=\"margin:0;color:#827674;font-size:13px;line-height:1.5;\">Conservá el número #${esc(o.id)} como referencia de tu pedido.${contact ? '<br>' + contact : ''}</p>\n  </td></tr>\n</table>\n</td></tr></table>\n</body></html>`;\n\nreturn [{ json: {\n  to: delivery.recipient,\n  subject: `${subject} — ${t.name}`,\n  html,\n  delivery_id: delivery.id,\n  callback_url: delivery.callback_url,\n} }];\n"
       },
-      "id": "bd62da18-059f-4caf-b4d9-ccba147dda78",
+      "id": "409c3dab-5da0-4ddf-b6c9-d73884a848de",
       "name": "Armar email al cliente",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -41,7 +41,7 @@
           "appendAttribution": false
         }
       },
-      "id": "113c7db3-427c-4113-ac82-8c288f7054a3",
+      "id": "62e93b65-3339-466a-bf4b-f79d531cb8f5",
       "name": "Email al cliente",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
@@ -49,7 +49,7 @@
         520,
         80
       ],
-      "webhookId": "8f4de45e-a5ff-4f82-9918-224124b3c0b0",
+      "webhookId": "531dd073-b176-45da-8ca6-2985654e74b7",
       "onError": "continueErrorOutput"
     },
     {
@@ -65,7 +65,7 @@
           "timeout": 10000
         }
       },
-      "id": "2b70f303-a318-468a-9387-c3fd92a68abf",
+      "id": "e1ab70e8-99ca-4cde-9a79-0b16f3a7bfa1",
       "name": "Informar enviado",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -87,7 +87,7 @@
           "timeout": 10000
         }
       },
-      "id": "e4baf60b-e5be-4a65-80bc-9c987c481a1b",
+      "id": "394bbad1-6fe9-4cd1-a1de-7b427c9ab249",
       "name": "Informar error",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -98,9 +98,9 @@
     },
     {
       "parameters": {
-        "jsCode": "// Aviso al equipo del negocio para pedidos nuevos y señas pagadas.\nconst d = $input.first().json.body ?? {};\nif (!['order_created', 'payment_received'].includes(d.event)) return [];\nconst t = d.tenant ?? {};\nconst o = d.order ?? {};\nconst c = d.customer ?? {};\nconst money = n => '$' + Math.round(Number(n ?? 0)).toLocaleString('es-AR');\nconst header = d.event === 'payment_received'\n  ? '✅ Seña pagada — ¡pedido confirmado para preparar!'\n  : '🆕 Nuevo pedido (esperando seña)';\nconst items = (o.items ?? []).map(i => `• ${i.quantity}x ${i.product_name}${i.variant_name ? ' — ' + i.variant_name : ''}`).join('\\n');\nconst text = [\n  `🍰 ${t.name}`,\n  header,\n  '',\n  `🧾 Pedido: #${o.id}`,\n  `👤 Cliente: ${c.name}${c.phone ? ' (' + c.phone + ')' : ''}`,\n  `📅 ${o.delivery_method_display}: ${o.required_date_display}`,\n  '',\n  items,\n  '',\n  `💰 Total: ${money(o.total)} · Seña: ${money(o.deposit_amount)}`,\n  `📝 Comentarios: ${String(o.notes ?? '').trim() || 'Sin comentarios'}`,\n].join('\\n');\nreturn [{ json: { text } }];\n"
+        "jsCode": "// Aviso al equipo del negocio para pedidos nuevos y señas pagadas.\nconst d = $input.first().json.body ?? {};\nif (!['order_created', 'payment_received'].includes(d.event)) return [];\nconst t = d.business ?? {};\nconst o = d.order ?? {};\nconst c = d.customer ?? {};\nconst money = n => '$' + Math.round(Number(n ?? 0)).toLocaleString('es-AR');\nconst header = d.event === 'payment_received'\n  ? '✅ Seña pagada — ¡pedido confirmado para preparar!'\n  : '🆕 Nuevo pedido (esperando seña)';\nconst items = (o.items ?? []).map(i => `• ${i.quantity}x ${i.product_name}${i.variant_name ? ' — ' + i.variant_name : ''}`).join('\\n');\nconst text = [\n  `🍰 ${t.name}`,\n  header,\n  '',\n  `🧾 Pedido: #${o.id}`,\n  `👤 Cliente: ${c.name}${c.phone ? ' (' + c.phone + ')' : ''}`,\n  `📅 ${o.delivery_method_display}: ${o.required_date_display}`,\n  '',\n  items,\n  '',\n  `💰 Total: ${money(o.total)} · Seña: ${money(o.deposit_amount)}`,\n  `📝 Comentarios: ${String(o.notes ?? '').trim() || 'Sin comentarios'}`,\n].join('\\n');\nreturn [{ json: { text } }];\n"
       },
-      "id": "7a44a987-48fc-41a0-9b36-d265c9de504a",
+      "id": "02241f9a-f985-402a-9520-0e8d8c317ee5",
       "name": "Armar aviso al equipo",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -117,7 +117,7 @@
           "appendAttribution": false
         }
       },
-      "id": "a670b3d7-af92-4787-bd5b-1cf7a624142c",
+      "id": "1c012678-7fc4-454f-bab0-0fca30915c2d",
       "name": "Telegram al equipo",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
@@ -125,7 +125,7 @@
         520,
         400
       ],
-      "webhookId": "70f92f60-25f8-4232-9334-384de5d24b3b",
+      "webhookId": "eec47e06-72a5-4490-8ef9-1e2e9026bafa",
       "disabled": true
     },
     {
@@ -141,7 +141,7 @@
         -60,
         -140
       ],
-      "id": "d4b4593a-d97d-4881-8625-72ae1003c0ca",
+      "id": "bb97b786-cfc3-4f92-8ea8-888d209a5150",
       "name": "Nota webhook"
     },
     {
@@ -157,7 +157,7 @@
         240,
         -140
       ],
-      "id": "d4317685-a3be-48f6-b5e5-24a17215c3e4",
+      "id": "43286b10-a91b-496e-a959-dbca27711c1c",
       "name": "Nota email"
     },
     {
@@ -173,7 +173,7 @@
         760,
         -140
       ],
-      "id": "01f38bf2-7c84-4d28-9e98-1b84df423653",
+      "id": "c8be88d5-7438-4542-8d28-6e81223f1ac1",
       "name": "Nota callback"
     },
     {
@@ -189,7 +189,7 @@
         240,
         540
       ],
-      "id": "75187b0b-0afc-4b73-bd52-503f50996245",
+      "id": "dd468283-766d-4150-8cb1-ddef669275dd",
       "name": "Nota telegram"
     }
   ],

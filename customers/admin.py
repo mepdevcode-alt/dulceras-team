@@ -10,7 +10,7 @@ class CustomerAddressInline(admin.TabularInline):
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'tenant', 'phone', 'email', 'created_at')
-    list_filter = ('tenant',)
+    list_display = ('name', 'phone', 'email', 'created_at')
+    list_filter = ()
     search_fields = ('name', 'phone', 'email')
     inlines = [CustomerAddressInline]

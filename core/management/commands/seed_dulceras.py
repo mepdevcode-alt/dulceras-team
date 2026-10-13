@@ -5,7 +5,7 @@ from django.db import transaction
 
 from django.utils import timezone
 from datetime import timedelta
-from tenants.models import Plan, Subscription, Tenant, BusinessProfile, DeliveryZone
+from tenants.models import BusinessProfile, DeliveryZone
 from catalog.models import Category, Product, ProductVariant
 from customers.models import Customer, CustomerAddress
 from orders.models import Order, OrderItem, OrderStatusHistory
@@ -13,7 +13,6 @@ from orders.models import Order, OrderItem, OrderStatusHistory
 User = get_user_model()
 
 
-TENANT_SLUG = 'dulceras-team'
 
 CATEGORIES = [
     {'name': 'Cookies estilo NY',   'slug': 'cookies-ny',         'description': 'Cookies gigantes con chips de chocolate, estilo Nueva York.'},
@@ -211,7 +210,7 @@ class Command(BaseCommand):
     help = 'Carga el seed data de Dulceras Team'
 
     def add_arguments(self, parser):
-        parser.add_argument('--reset', action='store_true', help='Elimina y recrea todos los datos del tenant')
+        parser.add_argument('--reset', action='store_true', help='Elimina y recrea todos los datos del negocio')
         parser.add_argument('--admin-password', default='admin1234', help='Contraseña del usuario admin (default: admin1234)')
         parser.add_argument('--skip-orders', action='store_true', help='No crear clientes ni pedidos de demo')
 
@@ -219,84 +218,35 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options['reset']:
             # FKs con PROTECT (pago→pedido, pedido→cliente/variante, producto→categoría):
-            # borrar en orden antes del tenant
+            # borrar en orden
             from payments.models import PaymentIntent
-            PaymentIntent.objects.filter(order__tenant__slug=TENANT_SLUG).delete()
-            Order.objects.filter(tenant__slug=TENANT_SLUG).delete()
-            Product.objects.filter(tenant__slug=TENANT_SLUG).delete()
-            Tenant.objects.filter(slug=TENANT_SLUG).delete()
-            self.stdout.write(self.style.WARNING('Tenant Dulceras Team eliminado.'))
+            PaymentIntent.objects.all().delete()
+            Order.objects.all().delete()
+            Product.objects.all().delete()
+            Category.objects.all().delete()
+            Customer.objects.all().delete()
+            DeliveryZone.objects.all().delete()
+            BusinessProfile.objects.all().delete()
+            self.stdout.write(self.style.WARNING('Datos del negocio eliminados.'))
 
-        # Plans
-        PLANS = [
-            {
-                'slug': 'basico', 'name': 'Básico',
-                'price_monthly': Decimal('0'),
-                'description': 'Para empezar. Ideal para emprendimientos chicos.',
-                'max_products': 10, 'max_users': 2, 'max_orders_per_day': 20,
-                'has_mp_integration': False, 'has_whatsapp': False,
-            },
-            {
-                'slug': 'pro', 'name': 'Pro',
-                'price_monthly': Decimal('15000'),
-                'description': 'Para negocios en crecimiento. Incluye Mercado Pago y WhatsApp.',
-                'max_products': 50, 'max_users': 5, 'max_orders_per_day': 0,
-                'has_mp_integration': True, 'has_whatsapp': True,
-            },
-            {
-                'slug': 'enterprise', 'name': 'Enterprise',
-                'price_monthly': Decimal('35000'),
-                'description': 'Sin límites. Para negocios consolidados.',
-                'max_products': 0, 'max_users': 0, 'max_orders_per_day': 0,
-                'has_mp_integration': True, 'has_whatsapp': True,
-            },
-        ]
-        for plan_data in PLANS:
-            slug = plan_data.pop('slug')
-            obj, created = Plan.objects.update_or_create(
-                slug=slug,
-                defaults=plan_data,
-            )
-            self.stdout.write(f"  {'+' if created else '~'} Plan: {obj.name} (${obj.price_monthly}/mes)")
-
-        # Tenant
-        pro_plan = Plan.objects.get(slug='pro')
-        tenant, created = Tenant.objects.get_or_create(
-            slug=TENANT_SLUG,
-            defaults={'name': 'Dulceras Team', 'is_active': True, 'plan': pro_plan},
-        )
-        if not created and tenant.plan is None:
-            tenant.plan = pro_plan
-            tenant.save(update_fields=['plan'])
-        self.stdout.write(f"{'Creado' if created else 'Existente'}: Tenant '{tenant.name}' (plan: {tenant.plan})")
-
-        # Business profile
-        profile, bp_created = BusinessProfile.objects.get_or_create(
-            tenant=tenant,
-            defaults={
-                'address': 'Almagro, Ciudad Autónoma de Buenos Aires',
-                'phone': '',
-                'email': 'dulcerasteam@gmail.com',
-                'whatsapp': '',
-                'instagram': '@dulceras.team',
-                'advance_hours_required': 48,
-                'deposit_percentage': Decimal('50'),
-                'primary_color': '#3D1A0E',
-                'accent_color': '#E8889A',
-                'bg_color': '#FDF6EC',
-            },
-        )
-        if not bp_created:
-            profile.primary_color = '#3D1A0E'
-            profile.accent_color = '#E8889A'
-            profile.bg_color = '#FDF6EC'
-            profile.save(update_fields=['primary_color', 'accent_color', 'bg_color'])
-        self.stdout.write(f"  {'+ ' if bp_created else '~ '}BusinessProfile")
+        # Configuración del negocio (registro único)
+        profile = BusinessProfile.load()
+        if not profile.name:
+            profile.name = 'Dulceras Team'
+            profile.address = 'Almagro, Ciudad Autónoma de Buenos Aires'
+            profile.email = 'dulcerasteam@gmail.com'
+            profile.instagram = '@dulceras.team'
+            profile.advance_hours_required = 48
+            profile.deposit_percentage = Decimal('50')
+        profile.primary_color = '#3D1A0E'
+        profile.accent_color = '#E8889A'
+        profile.bg_color = '#FDF6EC'
+        profile.save()
+        self.stdout.write(f"  ~ Configuración del negocio: {profile.name}")
 
         # Delivery zones
         for zone_data in DELIVERY_ZONES:
             obj, created = DeliveryZone.objects.get_or_create(
-                tenant=tenant,
                 name=zone_data['name'],
                 defaults={
                     'description': zone_data['description'],
@@ -308,9 +258,8 @@ class Command(BaseCommand):
 
         # Categories
         category_map = {}
-        for i, cat_data in enumerate(CATEGORIES):
+        for cat_data in CATEGORIES:
             obj, created = Category.objects.get_or_create(
-                tenant=tenant,
                 slug=cat_data['slug'],
                 defaults={
                     'name': cat_data['name'],
@@ -325,7 +274,6 @@ class Command(BaseCommand):
         for i, prod_data in enumerate(PRODUCTS):
             category = category_map[prod_data['category_slug']]
             product, created = Product.objects.get_or_create(
-                tenant=tenant,
                 name=prod_data['name'],
                 defaults={
                     'category': category,
@@ -339,7 +287,6 @@ class Command(BaseCommand):
 
             for j, var_data in enumerate(prod_data['variants']):
                 variant, v_created = ProductVariant.objects.get_or_create(
-                    tenant=tenant,
                     product=product,
                     name=var_data['name'],
                     defaults={
@@ -353,61 +300,38 @@ class Command(BaseCommand):
 
         # Admin user
         admin_password = options['admin_password']
-        existing_admin = User.objects.filter(username='admin').first()
-        if existing_admin and existing_admin.tenant_id != tenant.id:
-            # Tras --reset el usuario queda sin tenant: reasignarlo en lugar de duplicarlo
-            existing_admin.tenant = tenant
-            existing_admin.save(update_fields=['tenant'])
-            self.stdout.write('  ~ Usuario admin reasignado al tenant')
-        elif not existing_admin:
+        if not User.objects.filter(username='admin').exists():
             User.objects.create_user(
                 username='admin',
                 password=admin_password,
                 email='dulcerasteam@gmail.com',
-                tenant=tenant,
-                role=User.TENANT_ADMIN,
+                role=User.ADMIN,
             )
             self.stdout.write(f"  + Usuario admin (contraseña: {admin_password})")
         else:
             self.stdout.write('  ~ Usuario admin ya existe')
 
-        # Subscription
-        sub, sub_created = Subscription.objects.get_or_create(
-            tenant=tenant,
-            defaults={
-                'plan': pro_plan,
-                'status': Subscription.ACTIVE,
-                'current_period_end': timezone.now() + timedelta(days=365),
-            },
-        )
-        if not sub_created and sub.status == Subscription.TRIAL:
-            sub.status = Subscription.ACTIVE
-            sub.plan = pro_plan
-            sub.current_period_end = timezone.now() + timedelta(days=365)
-            sub.save(update_fields=['status', 'plan', 'current_period_end', 'updated_at'])
-        self.stdout.write(f"  {'+ ' if sub_created else '~ '}Subscription: {sub.status}")
-
         if not options['skip_orders']:
-            self._seed_demo_orders(tenant)
+            self._seed_demo_orders()
 
         self.stdout.write(self.style.SUCCESS('\nSeed de Dulceras Team completado.'))
 
-    def _seed_demo_orders(self, tenant):
-        if Order.objects.filter(tenant=tenant, internal_notes=DEMO_ORDER_MARKER).exists():
+    def _seed_demo_orders(self):
+        if Order.objects.filter(internal_notes=DEMO_ORDER_MARKER).exists():
             self.stdout.write('  ~ Pedidos de demo ya existen (usar --reset para recrearlos)')
             return
 
-        admin = User.objects.filter(tenant=tenant, role=User.TENANT_ADMIN).first()
-        zones = {z.name: z for z in DeliveryZone.objects.filter(tenant=tenant)}
+        admin = User.objects.filter(role=User.ADMIN).first()
+        zones = {z.name: z for z in DeliveryZone.objects.all()}
         variants = {
             (v.product.name, v.name): v
-            for v in ProductVariant.objects.filter(tenant=tenant).select_related('product')
+            for v in ProductVariant.objects.select_related('product')
         }
 
         customers = []
         for data in DEMO_CUSTOMERS:
             customer, _ = Customer.objects.get_or_create(
-                tenant=tenant, name=data['name'],
+                name=data['name'],
                 defaults={'phone': data['phone'], 'email': data['email']},
             )
             address = None
@@ -439,7 +363,6 @@ class Command(BaseCommand):
             deposit = (total * deposit_pct / 100).quantize(Decimal('1'))
 
             order = Order.objects.create(
-                tenant=tenant,
                 customer=customer,
                 status=data['status'],
                 delivery_method=Order.DELIVERY if zone else Order.PICKUP,

@@ -1,9 +1,9 @@
 from django.conf import settings
 from django.db import models
-from core.models import TenantModel
+from core.models import TimeStampedModel
 
 
-class Customer(TenantModel):
+class Customer(TimeStampedModel):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         null=True, blank=True,
@@ -16,6 +16,7 @@ class Customer(TenantModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        db_table = 'clientes'
         verbose_name = 'Cliente'
         verbose_name_plural = 'Clientes'
 
@@ -23,7 +24,7 @@ class Customer(TenantModel):
         return self.name
 
 
-class Review(TenantModel):
+class Review(TimeStampedModel):
     customer = models.ForeignKey(
         Customer, null=True, blank=True,
         on_delete=models.SET_NULL, related_name='reviews',
@@ -34,6 +35,7 @@ class Review(TenantModel):
     is_approved = models.BooleanField(default=False)
 
     class Meta:
+        db_table = 'resenas'
         ordering = ['-created_at']
         verbose_name = 'Reseña'
         verbose_name_plural = 'Reseñas'
@@ -51,6 +53,7 @@ class CustomerAddress(models.Model):
     is_default = models.BooleanField(default=False)
 
     class Meta:
+        db_table = 'direcciones_cliente'
         verbose_name = 'Dirección'
         verbose_name_plural = 'Direcciones'
 

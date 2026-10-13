@@ -1,8 +1,8 @@
 from django.db import models
-from core.models import TenantModel
+from core.models import TimeStampedModel
 
 
-class PaymentIntent(TenantModel):
+class PaymentIntent(TimeStampedModel):
     PENDING = 'pending'
     APPROVED = 'approved'
     REJECTED = 'rejected'
@@ -25,6 +25,7 @@ class PaymentIntent(TenantModel):
     mp_response = models.JSONField(default=dict)
 
     class Meta:
+        db_table = 'intentos_pago'
         verbose_name = 'Intención de pago'
         verbose_name_plural = 'Intenciones de pago'
 
@@ -32,7 +33,7 @@ class PaymentIntent(TenantModel):
         return f"Pago #{self.pk} — {self.get_status_display()} — ${self.amount}"
 
 
-class WebhookEvent(TenantModel):
+class WebhookEvent(TimeStampedModel):
     mp_id = models.CharField(max_length=200, db_index=True)
     topic = models.CharField(max_length=100)
     payload = models.JSONField(default=dict)
@@ -41,6 +42,7 @@ class WebhookEvent(TenantModel):
     error = models.TextField(blank=True)
 
     class Meta:
+        db_table = 'eventos_webhook_mp'
         verbose_name = 'Evento webhook'
         verbose_name_plural = 'Eventos webhook'
 

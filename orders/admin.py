@@ -18,8 +18,8 @@ class OrderStatusHistoryInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'tenant', 'customer', 'status', 'delivery_method', 'required_date', 'total', 'created_at')
-    list_filter = ('tenant', 'status', 'delivery_method', 'required_date')
+    list_display = ('id', 'customer', 'status', 'delivery_method', 'required_date', 'total', 'created_at')
+    list_filter = ('status', 'delivery_method', 'required_date')
     search_fields = ('customer__name', 'customer__phone')
     readonly_fields = ('subtotal', 'total', 'deposit_amount', 'balance_amount', 'created_at', 'updated_at')
     inlines = [OrderItemInline, OrderStatusHistoryInline]

@@ -7,11 +7,11 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from tenants.models import Tenant
+from tenants.models import BusinessProfile
 from .models import Coupon, Order, OrderItem, OrderStatusHistory
 
 
@@ -52,16 +52,10 @@ class PublicDateAvailabilityView(APIView):
     """
     permission_classes = [AllowAny]
 
-    def get(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-        max_per_day = 0
-        advance_hours = 48
-        try:
-            profile = tenant.profile
-            max_per_day = profile.max_orders_per_day
-            advance_hours = profile.advance_hours_required
-        except Exception:
-            pass
+    def get(self, request):
+        profile = BusinessProfile.load()
+        max_per_day = profile.max_orders_per_day
+        advance_hours = profile.advance_hours_required
 
         today = timezone.localdate()
         min_date = today + timedelta(hours=advance_hours / 24)
@@ -72,7 +66,6 @@ class PublicDateAvailabilityView(APIView):
             counts = (
                 Order.objects
                 .filter(
-                    tenant=tenant,
                     required_date__gte=today,
                     required_date__lte=end_date,
                     status__in=ACTIVE_STATUSES,
@@ -93,11 +86,8 @@ class PublicDateAvailabilityView(APIView):
 class PublicOrderCreateView(APIView):
     permission_classes = [AllowAny]
 
-    def post(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-        serializer = OrderCreateSerializer(
-            data=request.data, context={'tenant': tenant, 'request': request}
-        )
+    def post(self, request):
+        serializer = OrderCreateSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
         return Response(
@@ -109,26 +99,24 @@ class PublicOrderCreateView(APIView):
 class PublicOrderDetailView(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, tenant_slug, pk):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
+    def get(self, request, pk):
         order = get_object_or_404(
             Order.objects.prefetch_related('items', 'status_history')
                          .select_related('customer', 'delivery_zone'),
-            pk=pk, tenant=tenant,
+            pk=pk,
         )
         return Response(OrderDetailSerializer(order).data)
 
 
 class PublicCouponValidateView(APIView):
     """
-    POST /api/public/{slug}/coupons/validate/
+    POST /api/public/coupons/validate/
     Body: { code, subtotal }
     Responde con el descuento calculado sin aplicarlo (no incrementa uses_count).
     """
     permission_classes = [AllowAny]
 
-    def post(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
+    def post(self, request):
         code = (request.data.get('code', '') or '').strip().upper()
         subtotal = request.data.get('subtotal', 0)
 
@@ -141,7 +129,7 @@ class PublicCouponValidateView(APIView):
             return Response({'valid': False, 'error': 'Subtotal inválido.'}, status=400)
 
         try:
-            coupon = Coupon.objects.get(tenant=tenant, code__iexact=code)
+            coupon = Coupon.objects.get(code__iexact=code)
         except Coupon.DoesNotExist:
             return Response({'valid': False, 'error': 'Cupón no encontrado.'})
 
@@ -177,19 +165,12 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
     http_method_names = ['get', 'patch', 'post', 'head', 'options']
 
     def get_queryset(self):
-        user = self.request.user
         qs = (
             Order.objects
-            .select_related('customer', 'delivery_zone', 'tenant')
+            .select_related('customer', 'delivery_zone')
             .prefetch_related('items', 'status_history')
             .order_by('-created_at')
         )
-        if not user.is_platform_owner:
-            qs = qs.filter(tenant=user.tenant)
-        else:
-            slug = self.request.query_params.get('tenant')
-            if slug:
-                qs = qs.filter(tenant__slug=slug)
 
         status_filter = self.request.query_params.get('status')
         if status_filter:
@@ -236,7 +217,7 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
             'today_orders': qs.filter(required_date=today).count(),
             'orders_month': qs.filter(created_at__year=today.year, created_at__month=today.month).count(),
             'monthly_revenue': float(revenue_qs.aggregate(t=Sum('total'))['t'] or 0),
-            'total_customers': Customer.objects.filter(tenant=request.user.tenant).count(),
+            'total_customers': Customer.objects.count(),
         })
 
     @action(detail=False, methods=['post'], url_path='bulk-delete')
@@ -277,7 +258,7 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         try:
             from notifications.services import notify_order_status
-            notify_order_status(order.tenant, order, prev_status, new_status, request.user)
+            notify_order_status(order, prev_status, new_status, request.user)
         except Exception:
             pass
 
@@ -298,21 +279,12 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         delivery = n8n.send_order_event(
-            order.tenant, order, n8n.MESSAGE_REQUESTED, data['template'],
+            order, n8n.MESSAGE_REQUESTED, data['template'],
             subject=data['subject'], message=data['message'],
             triggered_by=request.user, resent_from=data.get('original'),
         )
         delivery.refresh_from_db()
         return Response(MessageDeliverySerializer(delivery).data, status=status.HTTP_201_CREATED)
-
-    def _get_tenant(self):
-        user = self.request.user
-        if user.is_platform_owner:
-            slug = self.request.query_params.get('tenant')
-            if slug:
-                return get_object_or_404(Tenant, slug=slug, is_active=True)
-            return user.tenant  # fallback al tenant propio del platform_owner
-        return user.tenant
 
     @action(detail=False, methods=['get'], url_path='calendar')
     def calendar(self, request):
@@ -323,20 +295,11 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         except (ValueError, AttributeError):
             return Response({'error': 'Formato inválido. Usar YYYY-MM.'}, status=400)
 
-        tenant = self._get_tenant()
-        if not tenant:
-            return Response({'error': 'tenant requerido.'}, status=400)
-
-        max_per_day = 0
-        try:
-            max_per_day = tenant.profile.max_orders_per_day
-        except Exception:
-            pass
+        max_per_day = BusinessProfile.load().max_orders_per_day
 
         orders = (
             Order.objects
             .filter(
-                tenant=tenant,
                 required_date__year=year,
                 required_date__month=month,
                 status__in=ACTIVE_STATUSES,
@@ -371,14 +334,9 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         if not date_str:
             return Response({'error': 'Parámetro date requerido (YYYY-MM-DD).'}, status=400)
 
-        tenant = self._get_tenant()
-        if not tenant:
-            return Response({'error': 'tenant requerido.'}, status=400)
-
         orders = (
             Order.objects
             .filter(
-                tenant=tenant,
                 required_date=date_str,
                 status__in=ACTIVE_STATUSES,
             )
@@ -417,9 +375,6 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         ?period=today|week|month|all  (default: month)
         """
         period = request.query_params.get('period', 'month')
-        tenant = self._get_tenant()
-        if not tenant:
-            return Response({'error': 'tenant requerido.'}, status=400)
 
         today = timezone.localdate()
         if period == 'today':
@@ -440,7 +395,7 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(created_at__date__lte=to_date)
             return qs
 
-        base = date_qs(Order.objects.filter(tenant=tenant, status__in=ACTIVE_STATUSES))
+        base = date_qs(Order.objects.filter(status__in=ACTIVE_STATUSES))
         paid = Q(status__in=PAID_STATUSES)
         unpaid_balance = Q(status__in=[s for s in PAID_STATUSES if s != Order.DELIVERED])
 
@@ -464,7 +419,7 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         ]
 
         # ── Productos más vendidos ────────────────────────────────────────────
-        item_filters = {'order__tenant': tenant, 'order__status__in': PAID_STATUSES}
+        item_filters = {'order__status__in': PAID_STATUSES}
         if from_date:
             item_filters['order__created_at__date__gte'] = from_date
         if to_date:
@@ -499,7 +454,7 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         # ── Ventas diarias ────────────────────────────────────────────────────
         daily = [
             {'date': str(row['day']), 'count': row['count'], 'revenue': float(row['revenue'] or 0)}
-            for row in date_qs(Order.objects.filter(tenant=tenant, status__in=PAID_STATUSES))
+            for row in date_qs(Order.objects.filter(status__in=PAID_STATUSES))
             .annotate(day=TruncDate('created_at'))
             .values('day')
             .annotate(count=Count('id'), revenue=Sum('total'))
@@ -512,7 +467,6 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         if from_date and customer_ids_in_period:
             returning_ids = set(
                 Order.objects.filter(
-                    tenant=tenant,
                     customer_id__in=customer_ids_in_period,
                     created_at__date__lt=from_date,
                 ).values_list('customer_id', flat=True)
@@ -590,16 +544,11 @@ class AdminCouponViewSet(viewsets.ModelViewSet):
     permission_classes = [IsTeamMember]
     serializer_class = CouponSerializer
 
-    def get_queryset(self):
-        user = self.request.user
-        qs = Coupon.objects.order_by('-created_at')
-        if not user.is_platform_owner:
-            qs = qs.filter(tenant=user.tenant)
-        return qs
+    queryset = Coupon.objects.order_by('-created_at')
 
     def perform_create(self, serializer):
         code = (serializer.validated_data.get('code', '') or '').upper()
-        serializer.save(tenant=self.request.user.tenant, code=code)
+        serializer.save(code=code)
 
     def perform_update(self, serializer):
         if 'code' in serializer.validated_data:

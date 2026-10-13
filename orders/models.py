@@ -1,15 +1,15 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
-from core.models import TenantModel
+from core.models import TimeStampedModel
 
 
-class Coupon(TenantModel):
+class Coupon(TimeStampedModel):
     PERCENTAGE = 'percentage'
     FIXED = 'fixed'
     TYPE_CHOICES = [(PERCENTAGE, 'Porcentaje'), (FIXED, 'Monto fijo')]
 
-    code = models.CharField(max_length=50)
+    code = models.CharField(max_length=50, unique=True)
     discount_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     discount_value = models.DecimalField(max_digits=10, decimal_places=2)
     min_order_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -20,12 +20,12 @@ class Coupon(TenantModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = [('tenant', 'code')]
+        db_table = 'cupones'
         verbose_name = 'Cupón'
         verbose_name_plural = 'Cupones'
 
     def __str__(self):
-        return f'{self.code} ({self.tenant})'
+        return self.code
 
     def is_valid_for(self, subtotal):
         """Retorna (ok: bool, error: str|None)."""
@@ -48,7 +48,7 @@ class Coupon(TenantModel):
         return min(self.discount_value, subtotal)
 
 
-class Order(TenantModel):
+class Order(TimeStampedModel):
     DRAFT = 'draft'
     PENDING_DEPOSIT = 'pending_deposit'
     DEPOSIT_PAID = 'deposit_paid'
@@ -105,6 +105,7 @@ class Order(TenantModel):
     internal_notes = models.TextField(blank=True)
 
     class Meta:
+        db_table = 'pedidos'
         ordering = ['-created_at']
         verbose_name = 'Pedido'
         verbose_name_plural = 'Pedidos'
@@ -122,6 +123,9 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
 
+    class Meta:
+        db_table = 'items_pedido'
+
     def __str__(self):
         return f"{self.quantity}x {self.product_name} — {self.variant_name}"
 
@@ -137,4 +141,5 @@ class OrderStatusHistory(models.Model):
     notes = models.CharField(max_length=500, blank=True)
 
     class Meta:
+        db_table = 'historial_estados_pedido'
         ordering = ['changed_at']

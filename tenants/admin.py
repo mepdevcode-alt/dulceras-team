@@ -1,28 +1,18 @@
 from django.contrib import admin
-from .models import Tenant, BusinessProfile, DeliveryZone
+from .models import BusinessProfile, DeliveryZone
 
 
-class BusinessProfileInline(admin.StackedInline):
-    model = BusinessProfile
-    extra = 0
+@admin.register(BusinessProfile)
+class BusinessProfileAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'phone', 'deposit_percentage')
 
-
-class DeliveryZoneInline(admin.TabularInline):
-    model = DeliveryZone
-    extra = 0
-
-
-@admin.register(Tenant)
-class TenantAdmin(admin.ModelAdmin):
-    list_display = ('name', 'slug', 'is_active', 'created_at')
-    list_filter = ('is_active',)
-    search_fields = ('name', 'slug')
-    prepopulated_fields = {'slug': ('name',)}
-    inlines = [BusinessProfileInline, DeliveryZoneInline]
+    def has_add_permission(self, request):
+        # Registro único: solo se edita el existente
+        return not BusinessProfile.objects.exists()
 
 
 @admin.register(DeliveryZone)
 class DeliveryZoneAdmin(admin.ModelAdmin):
-    list_display = ('name', 'tenant', 'price', 'is_active')
-    list_filter = ('tenant', 'is_active')
-    search_fields = ('name', 'tenant__name')
+    list_display = ('name', 'price', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('name',)

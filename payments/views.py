@@ -2,15 +2,13 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from catalog.views import TenantFilterMixin
 from orders.models import Order, OrderStatusHistory
-from tenants.models import Tenant
 from .models import PaymentIntent, WebhookEvent
-from .serializers import PaymentIntentSerializer, WebhookEventSerializer
+from .serializers import PaymentIntentSerializer
 from .services import build_mp_preference, get_mp_sdk
 from users.permissions import IsTeamMember
 
@@ -38,19 +36,15 @@ class InitiatePaymentView(APIView):
     """
     permission_classes = [AllowAny]
 
-    def post(self, request, tenant_slug, order_id):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-        order = get_object_or_404(
-            Order, pk=order_id, tenant=tenant, status=Order.PENDING_DEPOSIT
-        )
+    def post(self, request, order_id):
+        order = get_object_or_404(Order, pk=order_id, status=Order.PENDING_DEPOSIT)
 
         intent = PaymentIntent.objects.create(
-            tenant=tenant,
             order=order,
             amount=order.deposit_amount,
         )
 
-        sdk = get_mp_sdk(tenant)
+        sdk = get_mp_sdk()
         if not sdk:
             return Response(
                 {
@@ -65,10 +59,8 @@ class InitiatePaymentView(APIView):
             )
 
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
-        notification_url = request.build_absolute_uri(
-            f'/api/public/{tenant_slug}/webhooks/mp/'
-        )
-        preference_data = build_mp_preference(intent, tenant_slug, frontend_url, notification_url)
+        notification_url = request.build_absolute_uri('/api/public/webhooks/mp/')
+        preference_data = build_mp_preference(intent, frontend_url, notification_url)
 
         try:
             result = sdk.preference().create(preference_data)
@@ -110,9 +102,8 @@ class PaymentStatusView(APIView):
     """Consulta el estado del último PaymentIntent de un pedido."""
     permission_classes = [AllowAny]
 
-    def get(self, request, tenant_slug, order_id):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-        order = get_object_or_404(Order, pk=order_id, tenant=tenant)
+    def get(self, request, order_id):
+        order = get_object_or_404(Order, pk=order_id)
         intent = order.payment_intents.order_by('-created_at').first()
         if not intent:
             return Response({'status': None, 'detail': 'Sin intentos de pago registrados.'})
@@ -132,12 +123,12 @@ class MercadoPagoWebhookView(APIView):
     authentication_classes = []
     # TODO: validar firma X-MP-Signature cuando MP la envíe
 
-    def get(self, request, tenant_slug):
+    # tenant_slug: solo para la URL vieja /api/public/<slug>/webhooks/mp/, que siguen
+    # usando las preferencias de pago creadas antes de pasar a negocio único.
+    def get(self, request, tenant_slug=None):
         return Response({'status': 'ok'})
 
-    def post(self, request, tenant_slug):
-        tenant = get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
-
+    def post(self, request, tenant_slug=None):
         data = request.data
         topic = data.get('type') or request.query_params.get('topic', 'unknown')
         mp_id = str(
@@ -151,13 +142,12 @@ class MercadoPagoWebhookView(APIView):
         # Idempotencia: registrar evento antes de procesar
         event, created = WebhookEvent.objects.get_or_create(
             mp_id=mp_id,
-            tenant=tenant,
             defaults={'topic': topic, 'payload': data},
         )
         if not created and event.processed:
             return Response({'status': 'already_processed'})
 
-        sdk = get_mp_sdk(tenant)
+        sdk = get_mp_sdk()
         if sdk and topic == 'payment':
             try:
                 payment_response = sdk.payment().get(mp_id)
@@ -165,27 +155,9 @@ class MercadoPagoWebhookView(APIView):
                 mp_status = payment_data.get('status')
                 external_ref = payment_data.get('external_reference')
 
-                if external_ref and str(external_ref).startswith('sub_'):
-                    # Subscription payment
+                if external_ref:
                     try:
-                        from tenants.models import Subscription
-                        from django.utils import timezone
-                        from datetime import timedelta
-                        sub_id = int(str(external_ref)[4:])
-                        sub = Subscription.objects.get(pk=sub_id, tenant=tenant)
-                        if mp_status == 'approved':
-                            sub.status = Subscription.ACTIVE
-                            sub.last_payment_mp_id = mp_id
-                            sub.current_period_end = timezone.now() + timedelta(days=30)
-                            sub.save(update_fields=['status', 'last_payment_mp_id', 'current_period_end', 'updated_at'])
-                    except (Subscription.DoesNotExist, ValueError):
-                        pass
-
-                elif external_ref:
-                    try:
-                        intent = PaymentIntent.objects.get(
-                            pk=int(external_ref), tenant=tenant
-                        )
+                        intent = PaymentIntent.objects.get(pk=int(external_ref))
                         status_map = {
                             'approved': PaymentIntent.APPROVED,
                             'rejected': PaymentIntent.REJECTED,
@@ -212,7 +184,7 @@ class MercadoPagoWebhookView(APIView):
                                 )
                                 try:
                                     from notifications.services import notify_payment_received
-                                    notify_payment_received(tenant, order, mp_payment_id=mp_id)
+                                    notify_payment_received(order, mp_payment_id=mp_id)
                                 except Exception:
                                     pass
                     except (PaymentIntent.DoesNotExist, ValueError):
@@ -231,14 +203,10 @@ class MercadoPagoWebhookView(APIView):
 
 # ── Admin ─────────────────────────────────────────────────────────────────────
 
-class AdminPaymentViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
+class AdminPaymentViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsTeamMember]
     serializer_class = PaymentIntentSerializer
-    queryset = (
-        PaymentIntent.objects
-        .select_related('order', 'tenant')
-        .order_by('-created_at')
-    )
+    queryset = PaymentIntent.objects.select_related('order').order_by('-created_at')
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -248,14 +216,3 @@ class AdminPaymentViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(order_id=o)
         return qs
 
-
-class AdminWebhookViewSet(TenantFilterMixin, viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsTeamMember]
-    serializer_class = WebhookEventSerializer
-    queryset = WebhookEvent.objects.order_by('-created_at')
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if p := self.request.query_params.get('processed'):
-            qs = qs.filter(processed=p.lower() == 'true')
-        return qs
