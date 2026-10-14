@@ -191,6 +191,94 @@
       ],
       "id": "dd468283-766d-4150-8cb1-ddef669275dd",
       "name": "Nota telegram"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Una fila de log por cada webhook entrante (tenga email al cliente o no).\nconst d = $('Webhook Django').item.json.body ?? {};\nconst o = d.order ?? {};\nconst c = d.customer ?? {};\nconst del = d.delivery ?? {};\nreturn [{ json: {\n  timestamp: new Date().toISOString(),\n  event: d.event ?? '',\n  status: 'recibido',\n  order_id: o.id ?? '',\n  template: del.template ?? '',\n  to: del.recipient ?? '',\n  subject: del.subject ?? '',\n  customer_name: c.name ?? '',\n  customer_phone: c.phone ?? '',\n  delivery_id: del.id ?? '',\n  total: o.total ?? '',\n  deposit: o.deposit_amount ?? '',\n  error: '',\n} }];\n"
+      },
+      "id": "5f8c51fe-2185-43d4-9fb4-539b3caf3bdb",
+      "name": "Armar log (recibido)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resultado OK del email al cliente.\nconst d = $('Webhook Django').item.json.body ?? {};\nconst o = d.order ?? {};\nconst c = d.customer ?? {};\nconst del = d.delivery ?? {};\nconst mail = $('Armar email al cliente').item.json ?? {};\nreturn [{ json: {\n  timestamp: new Date().toISOString(),\n  event: d.event ?? '',\n  status: 'enviado',\n  order_id: o.id ?? '',\n  template: del.template ?? '',\n  to: mail.to ?? del.recipient ?? '',\n  subject: mail.subject ?? del.subject ?? '',\n  customer_name: c.name ?? '',\n  customer_phone: c.phone ?? '',\n  delivery_id: mail.delivery_id ?? del.id ?? '',\n  total: o.total ?? '',\n  deposit: o.deposit_amount ?? '',\n  error: '',\n} }];\n"
+      },
+      "id": "5dc04d43-6737-4b77-a5d5-f47d3fc86232",
+      "name": "Armar log (enviado)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resultado con error del email al cliente.\nconst d = $('Webhook Django').item.json.body ?? {};\nconst o = d.order ?? {};\nconst c = d.customer ?? {};\nconst del = d.delivery ?? {};\nconst mail = $('Armar email al cliente').item.json ?? {};\nconst err = String($json.error?.message ?? $json.error ?? 'Error enviando el email en n8n');\nreturn [{ json: {\n  timestamp: new Date().toISOString(),\n  event: d.event ?? '',\n  status: 'fallo',\n  order_id: o.id ?? '',\n  template: del.template ?? '',\n  to: mail.to ?? del.recipient ?? '',\n  subject: mail.subject ?? del.subject ?? '',\n  customer_name: c.name ?? '',\n  customer_phone: c.phone ?? '',\n  delivery_id: mail.delivery_id ?? del.id ?? '',\n  total: o.total ?? '',\n  deposit: o.deposit_amount ?? '',\n  error: err,\n} }];\n"
+      },
+      "id": "abd569d5-4d9a-498d-b375-c883b3e76cbe",
+      "name": "Armar log (fallo)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "CONFIGURAR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Logs",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "f2d2176a-0fd4-4f63-8723-a3a313f54ea5",
+      "name": "Registrar en Logs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1340,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "Log a Google Sheets (solapa 'Logs'). Una fila por evento entrante (status=recibido) + una por resultado del email (enviado/fallo).\nNO bloqueante: cuelga en paralelo del envio y el nodo Sheets va con onError=continue. Configurar credencial Google + ID del spreadsheet.\nEncabezados de la solapa: timestamp, event, status, order_id, template, to, subject, customer_name, customer_phone, delivery_id, total, deposit, error",
+        "height": 220,
+        "width": 420,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        -180
+      ],
+      "id": "3d38e8fd-7621-4941-9c05-ba2c6dc7a522",
+      "name": "Nota log"
     }
   ],
   "pinData": {},
@@ -205,6 +293,11 @@
           },
           {
             "node": "Armar aviso al equipo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Armar log (recibido)",
             "type": "main",
             "index": 0
           }
@@ -229,11 +322,21 @@
             "node": "Informar enviado",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Armar log (enviado)",
+            "type": "main",
+            "index": 0
           }
         ],
         [
           {
             "node": "Informar error",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Armar log (fallo)",
             "type": "main",
             "index": 0
           }
@@ -245,6 +348,39 @@
         [
           {
             "node": "Telegram al equipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar log (recibido)": {
+      "main": [
+        [
+          {
+            "node": "Registrar en Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar log (enviado)": {
+      "main": [
+        [
+          {
+            "node": "Registrar en Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar log (fallo)": {
+      "main": [
+        [
+          {
+            "node": "Registrar en Logs",
             "type": "main",
             "index": 0
           }
