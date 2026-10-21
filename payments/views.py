@@ -65,8 +65,9 @@ class InitiatePaymentView(APIView):
             )
 
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
-        notification_url = request.build_absolute_uri(
-            f'/api/public/{tenant_slug}/webhooks/mp/'
+        notification_url = (
+            getattr(settings, 'MP_WEBHOOK_URL', '')
+            or request.build_absolute_uri(f'/api/public/{tenant_slug}/webhooks/mp/')
         )
         preference_data = build_mp_preference(intent, tenant_slug, frontend_url, notification_url)
 
@@ -183,9 +184,14 @@ class MercadoPagoWebhookView(APIView):
 
                 elif external_ref:
                     try:
-                        intent = PaymentIntent.objects.get(
-                            pk=int(external_ref), tenant=tenant
+                        intent = (
+                            PaymentIntent.objects
+                            .filter(order_id=int(external_ref), tenant=tenant)
+                            .order_by('-created_at')
+                            .first()
                         )
+                        if not intent:
+                            raise PaymentIntent.DoesNotExist
                         status_map = {
                             'approved': PaymentIntent.APPROVED,
                             'rejected': PaymentIntent.REJECTED,

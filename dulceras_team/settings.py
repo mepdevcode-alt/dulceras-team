@@ -174,6 +174,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
 MERCADOPAGO_ACCESS_TOKEN = config('MERCADOPAGO_ACCESS_TOKEN', default='')
+# URL pública donde MP envía las notificaciones de pago (vacío = se construye dinámicamente).
+# En producción: https://tudominio.com/api/public/dulceras-team/webhooks/mp/
+# Para test con n8n local: http://localhost:5678/webhook/dulceras-team-pago-c07
+MP_WEBHOOK_URL = config('MP_WEBHOOK_URL', default='')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 WHATSAPP_PROVIDER_URL = config('WHATSAPP_PROVIDER_URL', default='')
 

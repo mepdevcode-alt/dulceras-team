@@ -32,7 +32,7 @@ def build_mp_preference(payment_intent, tenant_slug, frontend_url, notification_
             "failure": f"{frontend_url}/payment/failure/?order_id={order.id}",
             "pending": f"{frontend_url}/payment/pending/?order_id={order.id}",
         },
-        "external_reference": str(payment_intent.id),
+        "external_reference": str(order.id),
     }
     # Solo incluir notification_url si es una URL pública (no localhost)
     _local = ('localhost', '127.0.0.1', '0.0.0.0')
