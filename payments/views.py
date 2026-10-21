@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from catalog.views import TenantFilterMixin
@@ -120,6 +121,10 @@ class PaymentStatusView(APIView):
         return Response(PaymentIntentSerializer(intent).data)
 
 
+class WebhookRateThrottle(AnonRateThrottle):
+    scope = 'webhook'
+
+
 class MercadoPagoWebhookView(APIView):
     """
     Receptor de notificaciones de Mercado Pago.
@@ -131,6 +136,7 @@ class MercadoPagoWebhookView(APIView):
     """
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [WebhookRateThrottle]
     # TODO: validar firma X-MP-Signature cuando MP la envíe
 
     def get(self, request, tenant_slug):
