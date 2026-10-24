@@ -1,0 +1,43 @@
+# Producción en el VPS: Django (gunicorn) + n8n.
+# Los dos puertos escuchan solo en 127.0.0.1: nginx (CloudPanel) hace proxy a 8001
+# y el editor de n8n se abre por túnel SSH. Ver docker/README.md.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # SQLite y media viven en el host (./data, ./media), no dentro del contenedor
+      DATABASE_URL: sqlite:////app/data/db.sqlite3
+      RUN_SEED: "false"
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ./data:/app/data
+      - ./media:/app/media
+    depends_on:
+      - n8n
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"   # nunca exponer en 0.0.0.0
+    environment:
+      GENERIC_TIMEZONE: America/Argentina/Buenos_Aires
+      TZ: America/Argentina/Buenos_Aires
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://127.0.0.1:5678/
+      # El editor se abre por túnel SSH en http://localhost, sin HTTPS.
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

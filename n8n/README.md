@@ -41,35 +41,33 @@ El aviso por Telegram al equipo solo se dispara con `order_created` y `payment_r
 
 ## Instalación en el VPS
 
-```bash
-# 1. Levantar n8n (en el server)
-mkdir -p /opt/n8n && cd /opt/n8n
-# copiar n8n/docker-compose.yml acá
-docker compose up -d
+En producción n8n corre junto a Django en `docker-compose.prod.yml` (ver `docker/README.md`),
+así que ya queda levantado con el resto. Para configurarlo:
 
-# 2. Abrir el editor desde tu PC por túnel SSH
+```bash
+# 1. Abrir el editor desde tu PC por túnel SSH
 ssh -L 5678:127.0.0.1:5678 root@<ip-del-vps>
 # y entrar a http://localhost:5678 (crear el usuario owner la primera vez)
 ```
 
-3. En n8n: **Import from file** → `n8n/workflows/notificaciones_pedidos.json`.
-4. Crear credenciales:
+2. En n8n: **Import from file** → `n8n/workflows/notificaciones_pedidos.json`.
+3. Crear credenciales:
    - **Header Auth**: Name `X-Webhook-Secret`, Value = un secreto largo
      (ej. `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
      Usarla en *Webhook Django*, *Informar enviado* e *Informar error*.
    - **SMTP** (nodo *Email al cliente*) y cambiar `CONFIGURAR_REMITENTE@example.com` por el remitente real.
    - Opcional: **Telegram**, poner el `chatId` y activar el nodo *Telegram al equipo*.
-5. Activar el workflow.
-6. En el `.env` de Django:
+4. Activar el workflow.
+5. En el `.env` de Django (Django le habla a n8n por la red interna de Docker):
    ```
-   N8N_WEBHOOK_URL=http://127.0.0.1:5678/webhook/pedidos
-   N8N_WEBHOOK_SECRET=<el mismo secreto del paso 4>
+   N8N_WEBHOOK_URL=http://n8n:5678/webhook/pedidos
+   N8N_WEBHOOK_SECRET=<el mismo secreto del paso 3>
    # opcional, por defecto usa FRONTEND_URL (el dominio público)
    N8N_CALLBACK_BASE_URL=
    ```
-   y `systemctl restart dulceras`.
+   y `docker compose -f docker-compose.prod.yml up -d web`.
 
-Para apagar la integración: dejar `N8N_WEBHOOK_URL=` vacío y reiniciar Django.
+Para apagar la integración: dejar `N8N_WEBHOOK_URL=` vacío y recrear el contenedor `web`.
 
 ## Desarrollo local
 

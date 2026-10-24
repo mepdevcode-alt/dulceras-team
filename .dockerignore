@@ -1,0 +1,15 @@
+.git
+.env
+env/
+venv/
+frontend/
+docs/
+reporte/
+notas.md
+server.log
+db.sqlite3
+data/
+media/
+staticfiles/
+**/__pycache__/
+*.pyc
