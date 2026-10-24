@@ -94,16 +94,25 @@ if _database_url:
         'default': dj_database_url.config(default=_database_url, conn_max_age=600)
     }
 else:
+    # SQL Server local. Si hay DB_USER/DB_PASSWORD usa auth SQL
+    # (contenedor Docker Linux); sino cae a Trusted_Connection (auth
+    # de Windows, SQL Server nativo en Windows).
+    _db_user = config('DB_USER', default='')
+    _db_password = config('DB_PASSWORD', default='')
+    _db_options = {'driver': 'ODBC Driver 17 for SQL Server'}
+    if _db_user:
+        _db_options['extra_params'] = 'TrustServerCertificate=yes'
+    else:
+        _db_options['Trusted_Connection'] = 'yes'
     DATABASES = {
         'default': {
             'ENGINE': 'mssql',
             'NAME': config('DB_NAME', default='dulceras_db'),
             'HOST': config('DB_HOST', default='localhost'),
             'PORT': config('DB_PORT', default='1433'),
-            'OPTIONS': {
-                'driver': 'ODBC Driver 17 for SQL Server',
-                'Trusted_Connection': 'yes',
-            },
+            'USER': _db_user,
+            'PASSWORD': _db_password,
+            'OPTIONS': _db_options,
         }
     }
 
@@ -165,7 +174,6 @@ REST_FRAMEWORK = {
         'anon': '200/day',
         'user': '1000/day',
         'login': '5/minute',
-        'register': '10/hour',
         'webhook': '120/minute',
     },
 }

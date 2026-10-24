@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Superadmin — Dulceras{% endblock %}</title>
+  <title>{% block title %}Sistema — Dulceras{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,30 +26,26 @@
     .sa-table tr:hover td { background:rgba(255,255,255,0.03); }
   </style>
 </head>
-<body x-data x-init="if (!$store.adminAuth.isLoggedIn || $store.adminAuth.role !== 'platform_owner') window.location.href='/admin/login/'">
+<body x-data x-init="if (!$store.adminAuth.isLoggedIn || $store.adminAuth.role !== 'superadmin') window.location.href='/admin/login/'">
 
-<script>window.DULCERAS = { apiBase: '', tenant: 'dulceras-team' }</script>
+<script>window.DULCERAS = { apiBase: '' }</script>
 
-<div class="flex h-screen overflow-hidden" x-show="$store.adminAuth.isLoggedIn && $store.adminAuth.role === 'platform_owner'">
+<div class="flex h-screen overflow-hidden" x-show="$store.adminAuth.isLoggedIn && $store.adminAuth.role === 'superadmin'">
 
   <!-- Sidebar -->
   <aside class="hidden md:flex flex-col flex-shrink-0" style="width:220px;background:rgba(0,0,0,0.3);border-right:1px solid rgba(255,255,255,0.06)">
     <div class="p-5 flex items-center gap-2" style="border-bottom:1px solid rgba(255,255,255,0.06)">
       <img src="{% static 'brand/logo-icon.png' %}" alt="" style="height:28px;width:auto;filter:brightness(0) invert(1)">
-      <span class="font-fraunces font-bold text-white text-sm">Superadmin</span>
+      <span class="font-fraunces font-bold text-white text-sm">Sistema</span>
     </div>
     <nav class="flex-1 p-3 space-y-0.5">
-      <a href="/superadmin/metrics/"  class="sa-link {% block nav_metrics  %}{% endblock %}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        Métricas
+      <a href="/superadmin/" class="sa-link {% block nav_system %}{% endblock %}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Registros técnicos
       </a>
-      <a href="/superadmin/tenants/"  class="sa-link {% block nav_tenants  %}{% endblock %}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-        Tenants
-      </a>
-      <a href="/superadmin/plans/"    class="sa-link {% block nav_plans    %}{% endblock %}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-        Planes
+      <a href="/admin/dashboard/" class="sa-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        Volver al panel
       </a>
     </nav>
     <div class="p-3" style="border-top:1px solid rgba(255,255,255,0.06)">
@@ -69,7 +65,7 @@
   <!-- Main -->
   <main class="flex-1 overflow-y-auto">
     <div class="sticky top-0 z-10 flex items-center justify-between px-6 py-4" style="background:rgba(0,0,0,0.4);border-bottom:1px solid rgba(255,255,255,0.06)">
-      <h1 class="font-fraunces font-bold text-white" style="font-size:1.1rem">{% block page_title %}Superadmin{% endblock %}</h1>
+      <h1 class="font-fraunces font-bold text-white" style="font-size:1.1rem">{% block page_title %}Sistema{% endblock %}</h1>
     </div>
     <div class="p-6">{% block page_content %}{% endblock %}</div>
   </main>

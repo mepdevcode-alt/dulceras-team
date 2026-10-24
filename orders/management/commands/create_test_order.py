@@ -7,7 +7,6 @@ import datetime
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 
-from tenants.models import Tenant
 from customers.models import Customer
 from catalog.models import ProductVariant
 from orders.models import Order, OrderItem
@@ -19,20 +18,14 @@ class Command(BaseCommand):
     help = 'Crea un pedido de prueba y genera el link de pago sandbox de MP.'
 
     def handle(self, *args, **options):
-        try:
-            tenant = Tenant.objects.get(slug='dulceras-team')
-        except Tenant.DoesNotExist:
-            raise CommandError('No existe el tenant "dulceras-team". Corrí seed_dulceras primero.')
-
         customer, _ = Customer.objects.get_or_create(
-            tenant=tenant,
             email='comprador_prueba@test.com',
             defaults={'name': 'Comprador Prueba', 'phone': '1122334455'},
         )
 
         variant = (
             ProductVariant.objects
-            .filter(tenant=tenant, is_active=True)
+            .filter(is_active=True)
             .select_related('product')
             .first()
         )
@@ -42,7 +35,6 @@ class Command(BaseCommand):
         required_date = datetime.date.today() + datetime.timedelta(days=14)
 
         order = Order.objects.create(
-            tenant=tenant,
             customer=customer,
             status=Order.PENDING_DEPOSIT,
             required_date=required_date,
@@ -68,7 +60,6 @@ class Command(BaseCommand):
         # Crear PaymentIntent por el monto de la seña
         deposit = order.subtotal * order.deposit_percentage / 100
         intent = PaymentIntent.objects.create(
-            tenant=tenant,
             order=order,
             amount=deposit,
             status=PaymentIntent.PENDING,
@@ -77,14 +68,13 @@ class Command(BaseCommand):
         # Generar preferencia de pago en MP
         notification_url = (
             getattr(settings, 'MP_WEBHOOK_URL', '')
-            or 'http://localhost:8000/api/public/dulceras-team/webhooks/mp/'
+            or 'http://localhost:8000/api/public/webhooks/mp/'
         )
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:8000')
         try:
             sdk = get_mp_sdk()
             preference_data = build_mp_preference(
                 payment_intent=intent,
-                tenant_slug=tenant.slug,
                 frontend_url=frontend_url,
                 notification_url=notification_url,
             )

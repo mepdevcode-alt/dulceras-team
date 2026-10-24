@@ -42,12 +42,10 @@ class ProductPublicSerializer(serializers.ModelSerializer):
 # ── Admin ─────────────────────────────────────────────────────────────────────
 
 class CategoryAdminSerializer(serializers.ModelSerializer):
-    tenant = serializers.StringRelatedField(read_only=True)
-
     class Meta:
         model = Category
-        fields = ('id', 'tenant', 'name', 'slug', 'description', 'is_active', 'created_at', 'updated_at')
-        read_only_fields = ('tenant', 'created_at', 'updated_at')
+        fields = ('id', 'name', 'slug', 'description', 'is_active', 'created_at', 'updated_at')
+        read_only_fields = ('created_at', 'updated_at')
 
 
 class ProductVariantAdminSerializer(serializers.ModelSerializer):
@@ -59,19 +57,18 @@ class ProductVariantAdminSerializer(serializers.ModelSerializer):
 
 class ProductAdminSerializer(serializers.ModelSerializer):
     variants = ProductVariantAdminSerializer(many=True, read_only=True)
-    tenant = serializers.StringRelatedField(read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
     image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = (
-            'id', 'tenant', 'category', 'category_name',
+            'id', 'category', 'category_name',
             'name', 'description', 'image', 'image_url',
             'is_active', 'made_to_order', 'requires_advance_hours', 'sort_order',
             'variants', 'created_at', 'updated_at',
         )
-        read_only_fields = ('tenant', 'created_at', 'updated_at')
+        read_only_fields = ('created_at', 'updated_at')
 
     def get_image_url(self, obj):
         request = self.context.get('request')

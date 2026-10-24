@@ -63,13 +63,6 @@ document.addEventListener('alpine:init', () => {
         return payload.role || null
       } catch { return null }
     },
-    get tenantId() {
-      if (!this.token) return null
-      try {
-        const payload = JSON.parse(atob(this.token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))
-        return payload.tenant_id || null
-      } catch { return null }
-    },
 
     login(access, refresh, username) {
       localStorage.setItem('access_token', access)

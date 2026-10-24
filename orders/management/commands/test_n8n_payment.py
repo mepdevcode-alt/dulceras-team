@@ -4,7 +4,6 @@ Uso: python manage.py test_n8n_payment --order 14
 """
 from django.core.management.base import BaseCommand, CommandError
 from orders.models import Order
-from tenants.models import Tenant
 
 
 class Command(BaseCommand):
@@ -23,13 +22,13 @@ class Command(BaseCommand):
 
         if order_id:
             try:
-                order = Order.objects.select_related('tenant', 'customer').get(pk=order_id)
+                order = Order.objects.select_related('customer').get(pk=order_id)
             except Order.DoesNotExist:
                 raise CommandError(f'No existe el pedido #{order_id}.')
         else:
             order = (
                 Order.objects
-                .select_related('tenant', 'customer')
+                .select_related('customer')
                 .filter(status=Order.PENDING_DEPOSIT)
                 .order_by('-created_at')
                 .first()
@@ -61,7 +60,7 @@ class Command(BaseCommand):
         self.stdout.write('Enviando evento payment_received a n8n...')
         try:
             from notifications.services import notify_payment_received
-            notify_payment_received(order.tenant, order, mp_payment_id='TEST-SIMULADO')
+            notify_payment_received(order, mp_payment_id='TEST-SIMULADO')
             self.stdout.write(self.style.SUCCESS('Evento enviado. Revisá Telegram y el email.'))
         except Exception as exc:
             raise CommandError(f'Error al notificar: {exc}')

@@ -4,10 +4,10 @@ from .models import AuditLog
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ('action', 'model_name', 'object_id', 'tenant', 'user', 'ip_address', 'created_at')
-    list_filter = ('tenant', 'action', 'model_name')
+    list_display = ('action', 'model_name', 'object_id', 'user', 'ip_address', 'created_at')
+    list_filter = ('action', 'model_name')
     search_fields = ('model_name', 'object_id', 'user__username')
-    readonly_fields = ('tenant', 'user', 'action', 'model_name', 'object_id', 'changes', 'ip_address', 'created_at', 'updated_at')
+    readonly_fields = ('user', 'action', 'model_name', 'object_id', 'changes', 'ip_address', 'created_at', 'updated_at')
 
     def has_add_permission(self, request):
         return False

@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from catalog.models import ProductVariant
 from customers.models import Customer, CustomerAddress
-from tenants.models import DeliveryZone
+from tenants.models import BusinessProfile, DeliveryZone
 from .models import Coupon, Order, OrderItem, OrderStatusHistory
 
 
@@ -104,7 +104,7 @@ class OrderCreateSerializer(serializers.Serializer):
     coupon_code = serializers.CharField(required=False, allow_blank=True, default='')
 
     def validate(self, attrs):
-        tenant = self.context['tenant']
+        profile = BusinessProfile.load()
         errors = {}
 
         # Validar que items no esté vacío
@@ -117,7 +117,7 @@ class OrderCreateSerializer(serializers.Serializer):
         for i, item in enumerate(items):
             try:
                 variant = ProductVariant.objects.select_related('product').get(
-                    pk=item['variant_id'], tenant=tenant, is_active=True
+                    pk=item['variant_id'], is_active=True
                 )
                 max_advance_hours = max(max_advance_hours, variant.product.requires_advance_hours)
                 if not variant.product.made_to_order:
@@ -145,13 +145,9 @@ class OrderCreateSerializer(serializers.Serializer):
             })
 
         # Validar límite diario de pedidos
-        try:
-            max_per_day = tenant.profile.max_orders_per_day
-        except Exception:
-            max_per_day = 0
+        max_per_day = profile.max_orders_per_day
         if max_per_day > 0:
             orders_that_day = Order.objects.filter(
-                tenant=tenant,
                 required_date=required_date,
             ).exclude(status__in=['cancelled', 'refunded']).count()
             if orders_that_day >= max_per_day:
@@ -175,18 +171,16 @@ class OrderCreateSerializer(serializers.Serializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        tenant = self.context['tenant']
 
         # Cliente: buscar por teléfono (puede haber duplicados) o crear
         customer = (
             Customer.objects
-            .filter(tenant=tenant, phone=validated_data['customer_phone'])
+            .filter(phone=validated_data['customer_phone'])
             .order_by('id')
             .first()
         )
         if customer is None:
             customer = Customer.objects.create(
-                tenant=tenant,
                 phone=validated_data['customer_phone'],
                 name=validated_data['customer_name'],
                 email=validated_data.get('customer_email', ''),
@@ -206,7 +200,7 @@ class OrderCreateSerializer(serializers.Serializer):
             zone_id = validated_data.get('delivery_zone_id')
             if zone_id:
                 try:
-                    delivery_zone = DeliveryZone.objects.get(pk=zone_id, tenant=tenant, is_active=True)
+                    delivery_zone = DeliveryZone.objects.get(pk=zone_id, is_active=True)
                     delivery_cost = delivery_zone.price
                 except DeliveryZone.DoesNotExist:
                     pass
@@ -220,7 +214,7 @@ class OrderCreateSerializer(serializers.Serializer):
                 ProductVariant.objects
                 .select_related('product')
                 .select_for_update()
-                .get(pk=item['variant_id'], tenant=tenant)
+                .get(pk=item['variant_id'])
             )
             if not variant.product.made_to_order:
                 if variant.stock_quantity < item['quantity']:
@@ -244,10 +238,7 @@ class OrderCreateSerializer(serializers.Serializer):
                 'subtotal': line_total,
             })
 
-        try:
-            deposit_pct = tenant.profile.deposit_percentage
-        except Exception:
-            deposit_pct = 50
+        deposit_pct = BusinessProfile.load().deposit_percentage
 
         # Cupón: validar y calcular descuento
         coupon = None
@@ -256,7 +247,7 @@ class OrderCreateSerializer(serializers.Serializer):
         raw_code = (validated_data.get('coupon_code', '') or '').strip().upper()
         if raw_code:
             try:
-                coupon = Coupon.objects.get(tenant=tenant, code__iexact=raw_code)
+                coupon = Coupon.objects.get(code__iexact=raw_code)
                 ok, _err = coupon.is_valid_for(subtotal)
                 if ok:
                     discount_amount = float(coupon.compute_discount(subtotal))
@@ -271,7 +262,6 @@ class OrderCreateSerializer(serializers.Serializer):
         balance_amount = total - deposit_amount
 
         order = Order.objects.create(
-            tenant=tenant,
             customer=customer,
             status=Order.PENDING_DEPOSIT,
             delivery_method=validated_data['delivery_method'],
@@ -316,7 +306,7 @@ class OrderCreateSerializer(serializers.Serializer):
 
         try:
             from notifications.services import notify_new_order
-            notify_new_order(tenant, order)
+            notify_new_order(order)
         except Exception:
             pass
 

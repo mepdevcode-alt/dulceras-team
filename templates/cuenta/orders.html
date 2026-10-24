@@ -32,7 +32,7 @@
        async loadOrders() {
          this.loading = true
          try {
-           const res = await fetch('/api/public/{{ tenant_slug }}/customers/me/orders/', {
+           const res = await fetch('/api/public/customers/me/orders/', {
              headers: $store.customerAuth.headers()
            })
            if (res.status === 401) { $store.customerAuth.logout(); return }
@@ -58,7 +58,7 @@
          this.editError = ''
          this.editSuccess = ''
          try {
-           const res = await fetch('/api/public/{{ tenant_slug }}/customers/me/', {
+           const res = await fetch('/api/public/customers/me/', {
              method: 'PATCH',
              headers: $store.customerAuth.headers(),
              body: JSON.stringify(this.editForm)
@@ -106,7 +106,7 @@
          this.reviewLoading = true
          this.reviewError = ''
          try {
-           const res = await fetch('/api/public/{{ tenant_slug }}/customers/me/reviews/', {
+           const res = await fetch('/api/public/customers/me/reviews/', {
              method: 'POST',
              headers: $store.customerAuth.headers(),
              body: JSON.stringify({ rating: this.reviewRating, text: this.reviewText })

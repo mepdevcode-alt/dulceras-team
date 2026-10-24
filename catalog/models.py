@@ -1,15 +1,15 @@
 from django.db import models
-from core.models import TenantModel
+from core.models import TimeStampedModel
 
 
-class Category(TenantModel):
+class Category(TimeStampedModel):
     name = models.CharField(max_length=100)
-    slug = models.SlugField()
+    slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = [('tenant', 'slug')]
+        db_table = 'categorias'
         verbose_name = 'Categoría'
         verbose_name_plural = 'Categorías'
 
@@ -17,7 +17,7 @@ class Category(TenantModel):
         return self.name
 
 
-class Product(TenantModel):
+class Product(TimeStampedModel):
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='products')
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -32,6 +32,7 @@ class Product(TenantModel):
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
+        db_table = 'productos'
         ordering = ['sort_order', 'name']
         verbose_name = 'Producto'
         verbose_name_plural = 'Productos'
@@ -40,7 +41,7 @@ class Product(TenantModel):
         return self.name
 
 
-class ProductVariant(TenantModel):
+class ProductVariant(TimeStampedModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='variants')
     name = models.CharField(max_length=100)
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -49,6 +50,7 @@ class ProductVariant(TenantModel):
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
+        db_table = 'variantes_producto'
         ordering = ['sort_order', 'name']
         verbose_name = 'Variante'
         verbose_name_plural = 'Variantes'

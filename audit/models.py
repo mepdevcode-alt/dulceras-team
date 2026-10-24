@@ -1,9 +1,9 @@
 from django.conf import settings
 from django.db import models
-from core.models import TenantModel
+from core.models import TimeStampedModel
 
 
-class AuditLog(TenantModel):
+class AuditLog(TimeStampedModel):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='audit_logs'
     )
@@ -14,6 +14,7 @@ class AuditLog(TenantModel):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
     class Meta:
+        db_table = 'registros_auditoria'
         ordering = ['-created_at']
         verbose_name = 'Log de auditoría'
         verbose_name_plural = 'Logs de auditoría'

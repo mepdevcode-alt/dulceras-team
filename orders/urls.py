@@ -13,10 +13,10 @@ template_urlpatterns = [
 ]
 
 public_urlpatterns = [
-    path('<slug:tenant_slug>/orders/', PublicOrderCreateView.as_view(), name='public-order-create'),
-    path('<slug:tenant_slug>/orders/<int:pk>/', PublicOrderDetailView.as_view(), name='public-order-detail'),
-    path('<slug:tenant_slug>/calendar/availability/', PublicDateAvailabilityView.as_view(), name='public-date-availability'),
-    path('<slug:tenant_slug>/coupons/validate/', PublicCouponValidateView.as_view(), name='public-coupon-validate'),
+    path('orders/', PublicOrderCreateView.as_view(), name='public-order-create'),
+    path('orders/<int:pk>/', PublicOrderDetailView.as_view(), name='public-order-detail'),
+    path('calendar/availability/', PublicDateAvailabilityView.as_view(), name='public-date-availability'),
+    path('coupons/validate/', PublicCouponValidateView.as_view(), name='public-coupon-validate'),
 ]
 
 order_router = DefaultRouter()

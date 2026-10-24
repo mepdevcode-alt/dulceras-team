@@ -20,6 +20,7 @@ from django.conf import settings
 from django.db import connection, transaction
 from django.utils import timezone
 
+from tenants.models import BusinessProfile
 from . import email_service
 from .models import MessageDelivery
 
@@ -31,13 +32,13 @@ PAYMENT_RECEIVED = 'payment_received'
 ORDER_STATUS_CHANGED = 'order_status_changed'
 MESSAGE_REQUESTED = 'message_requested'  # envío manual desde el panel admin
 
-# Fallback de Django por plantilla: (tenant, delivery) -> bool
+# Fallback de Django por plantilla: delivery -> bool
 DJANGO_SENDERS = {
-    MessageDelivery.ORDER_CREATED: lambda t, d: email_service.send_order_confirmation(t, d.order),
-    MessageDelivery.PAYMENT_RECEIVED: lambda t, d: email_service.send_payment_confirmed(t, d.order),
-    MessageDelivery.ORDER_READY: lambda t, d: email_service.send_order_ready(t, d.order),
-    MessageDelivery.ORDER_CANCELLED: lambda t, d: email_service.send_order_cancelled(t, d.order),
-    MessageDelivery.CUSTOM: lambda t, d: email_service.send_custom_message(t, d.order, d.subject, d.message),
+    MessageDelivery.ORDER_CREATED: lambda d: email_service.send_order_confirmation(d.order),
+    MessageDelivery.PAYMENT_RECEIVED: lambda d: email_service.send_payment_confirmed(d.order),
+    MessageDelivery.ORDER_READY: lambda d: email_service.send_order_ready(d.order),
+    MessageDelivery.ORDER_CANCELLED: lambda d: email_service.send_order_cancelled(d.order),
+    MessageDelivery.CUSTOM: lambda d: email_service.send_custom_message(d.order, d.subject, d.message),
 }
 
 
@@ -49,19 +50,18 @@ def _money(value):
     return float(value or 0)
 
 
-def _tenant_payload(tenant):
-    profile = getattr(tenant, 'profile', None)
+def _business_payload():
+    business = BusinessProfile.load()
     return {
-        'slug': tenant.slug,
-        'name': tenant.name,
-        'email': getattr(profile, 'email', '') or '',
-        'phone': getattr(profile, 'phone', '') or '',
-        'whatsapp': getattr(profile, 'whatsapp', '') or '',
-        'instagram': getattr(profile, 'instagram', '') or '',
-        'logo_url': getattr(profile, 'logo_url', '') or '',
-        'primary_color': getattr(profile, 'primary_color', '') or '#3D1A0E',
-        'accent_color': getattr(profile, 'accent_color', '') or '#E8889A',
-        'bg_color': getattr(profile, 'bg_color', '') or '#FDF6EC',
+        'name': business.name,
+        'email': business.email,
+        'phone': business.phone,
+        'whatsapp': business.whatsapp,
+        'instagram': business.instagram,
+        'logo_url': business.logo_url,
+        'primary_color': business.primary_color or '#3D1A0E',
+        'accent_color': business.accent_color or '#E8889A',
+        'bg_color': business.bg_color or '#FDF6EC',
     }
 
 
@@ -94,13 +94,13 @@ def _delivery_payload(delivery):
     }
 
 
-def build_order_payload(tenant, order, event, delivery=None, **extra):
+def build_order_payload(order, event, delivery=None, **extra):
     frontend_url = getattr(settings, 'FRONTEND_URL', '').rstrip('/')
     customer = order.customer
     return {
         'event': event,
         'sent_at': timezone.now().isoformat(),
-        'tenant': _tenant_payload(tenant),
+        'business': _business_payload(),
         'order': {
             'id': order.pk,
             'status': order.status,
@@ -164,10 +164,10 @@ def _set_status(delivery, status, provider=None, error=''):
     MessageDelivery.objects.filter(pk=delivery.pk).update(**fields)
 
 
-def _send_with_django(tenant, delivery, error=''):
+def _send_with_django(delivery, error=''):
     ok = False
     try:
-        ok = DJANGO_SENDERS[delivery.template](tenant, delivery)
+        ok = DJANGO_SENDERS[delivery.template](delivery)
     except Exception:
         logger.exception('Email de Django falló (envío #%s)', delivery.pk)
     if ok:
@@ -179,11 +179,11 @@ def _send_with_django(tenant, delivery, error=''):
                     f'{error} {detail}'.strip())
 
 
-def _deliver(tenant, payload, delivery):
+def _deliver(payload, delivery):
     active = delivery and delivery.status != MessageDelivery.SKIPPED
     if not is_enabled():
         if active:
-            _send_with_django(tenant, delivery)
+            _send_with_django(delivery)
         return
 
     if active:
@@ -197,12 +197,12 @@ def _deliver(tenant, payload, delivery):
             payload.get('event'), payload.get('order', {}).get('id'), exc,
         )
         if active:
-            _send_with_django(tenant, delivery, f'n8n no disponible: {exc}.')
+            _send_with_django(delivery, f'n8n no disponible: {exc}.')
 
 
-def _deliver_in_thread(tenant, payload, delivery):
+def _deliver_in_thread(payload, delivery):
     try:
-        _deliver(tenant, payload, delivery)
+        _deliver(payload, delivery)
     except Exception:
         logger.exception('n8n: error inesperado enviando %s', payload.get('event'))
     finally:
@@ -210,7 +210,7 @@ def _deliver_in_thread(tenant, payload, delivery):
         connection.close()
 
 
-def send_order_event(tenant, order, event, template=None, *, subject='', message='',
+def send_order_event(order, event, template=None, *, subject='', message='',
                      triggered_by=None, resent_from=None, **extra):
     """
     Dispara un evento de pedido. Si `template` está presente, además registra y
@@ -226,7 +226,6 @@ def send_order_event(tenant, order, event, template=None, *, subject='', message
     if template:
         recipient = (order.customer.email or '').strip()
         delivery = MessageDelivery.objects.create(
-            tenant=tenant,
             order=order,
             template=template,
             recipient=recipient,
@@ -239,7 +238,7 @@ def send_order_event(tenant, order, event, template=None, *, subject='', message
         )
 
     try:
-        payload = build_order_payload(tenant, order, event, delivery=delivery, **extra)
+        payload = build_order_payload(order, event, delivery=delivery, **extra)
     except Exception:
         logger.exception('n8n: no se pudo armar el payload del pedido #%s', order.pk)
         payload = None
@@ -248,15 +247,15 @@ def send_order_event(tenant, order, event, template=None, *, subject='', message
         if payload is None:
             # Sin payload no hay n8n: mandar el email con Django.
             if delivery and delivery.status != MessageDelivery.SKIPPED:
-                _send_with_django(tenant, delivery)
+                _send_with_django(delivery)
             return
         # Con n8n apagado se envía en el request, como siempre lo hizo Django.
         if settings.N8N_ASYNC and is_enabled():
             threading.Thread(
-                target=_deliver_in_thread, args=(tenant, payload, delivery), daemon=True,
+                target=_deliver_in_thread, args=(payload, delivery), daemon=True,
             ).start()
         else:
-            _deliver(tenant, payload, delivery)
+            _deliver(payload, delivery)
 
     transaction.on_commit(send)
     return delivery

@@ -13,8 +13,7 @@ from django.utils import timezone
 PAYLOAD = {
     "event": "order_created",
     "sent_at": "",
-    "tenant": {
-        "slug": "dulceras-team",
+    "business": {
         "name": "Dulceras Team",
         "email": "dulcerasteam@gmail.com",
         "phone": "1122334455",

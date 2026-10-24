@@ -2,7 +2,6 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from customers.models import Customer
-from tenants.models import Tenant
 from users.models import User
 
 # Endpoints del panel admin: un cliente logueado no debe poder usarlos
@@ -23,15 +22,14 @@ ADMIN_ENDPOINTS = [
 
 class TeamAccessTests(TestCase):
     def setUp(self):
-        self.tenant = Tenant.objects.create(name='Pastelería Test', slug='pasteleria-test')
         self.admin = User.objects.create_user(
-            username='admin-test', password='pass-123', tenant=self.tenant, role=User.TENANT_ADMIN,
+            username='admin-test', password='pass-123', role=User.ADMIN,
         )
         self.customer_user = User.objects.create_user(
-            username='cliente@example.com', password='pass-123', tenant=self.tenant, role=User.CUSTOMER,
+            username='cliente@example.com', password='pass-123', role=User.CUSTOMER,
         )
         Customer.objects.create(
-            tenant=self.tenant, user=self.customer_user, name='Cliente', email='cliente@example.com',
+            user=self.customer_user, name='Cliente', email='cliente@example.com',
         )
         self.client = APIClient()
 
@@ -72,5 +70,5 @@ class TeamAccessTests(TestCase):
 
     def test_customer_account_api_still_works(self):
         self.client.force_authenticate(self.customer_user)
-        res = self.client.get(f'/api/public/{self.tenant.slug}/customers/me/')
+        res = self.client.get('/api/public/customers/me/')
         self.assertEqual(res.status_code, 200)

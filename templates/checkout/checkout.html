@@ -62,8 +62,8 @@
          /* Load zones + availability */
          try {
            const [zonesRes, availRes] = await Promise.all([
-             fetch('/api/public/dulceras-team/delivery-zones/'),
-             fetch('/api/public/dulceras-team/calendar/availability/'),
+             fetch('/api/public/delivery-zones/'),
+             fetch('/api/public/calendar/availability/'),
            ])
            if (zonesRes.ok) this.zones = await zonesRes.json()
            if (availRes.ok) {
@@ -80,7 +80,7 @@
          this.couponLoading = true
          this.couponError = ''
          try {
-           const res = await fetch('/api/public/dulceras-team/orders/coupons/validate/', {
+           const res = await fetch('/api/public/coupons/validate/', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ code, subtotal: this.cartTotal + this.deliveryCost })
@@ -136,7 +136,7 @@
              notes: this.form.notes || undefined,
              coupon_code: this.coupon?.code || undefined,
            }
-           const res = await fetch('/api/public/dulceras-team/orders/', {
+           const res = await fetch('/api/public/orders/', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify(payload)

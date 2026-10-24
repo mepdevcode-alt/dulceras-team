@@ -8,13 +8,3 @@ class TimeStampedModel(models.Model):
     class Meta:
         abstract = True
 
-
-class TenantModel(TimeStampedModel):
-    tenant = models.ForeignKey(
-        'tenants.Tenant',
-        on_delete=models.CASCADE,
-        related_name='+',
-    )
-
-    class Meta:
-        abstract = True

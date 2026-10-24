@@ -1,0 +1,134 @@
+{% extends "superadmin/base.html" %}
+{% block title %}Sistema — Dulceras{% endblock %}
+{% block nav_system %}active{% endblock %}
+{% block page_title %}Registros técnicos{% endblock %}
+
+{% block page_content %}
+<div x-data="{
+  tab: 'webhooks',
+  rows: [],
+  next: null,
+  count: 0,
+  loading: false,
+  error: '',
+
+  TABS: [
+    { key: 'webhooks', label: 'Webhooks Mercado Pago', url: '/api/superadmin/webhooks/' },
+    { key: 'deliveries', label: 'Envíos de mensajes', url: '/api/superadmin/deliveries/' },
+    { key: 'audit', label: 'Auditoría', url: '/api/superadmin/audit/' },
+  ],
+  DELIVERY_STYLES: {
+    pending: 'background:rgba(255,255,255,0.08);color:#D8C4AC',
+    queued: 'background:rgba(255,196,0,0.15);color:#F5C451',
+    sent: 'background:rgba(39,174,96,0.18);color:#6FD39A',
+    failed: 'background:rgba(231,76,60,0.18);color:#F28B82',
+    skipped: 'background:rgba(255,255,255,0.08);color:#A89580',
+  },
+
+  init() { this.load() },
+
+  select(key) { this.tab = key; this.load() },
+
+  async load(url = null) {
+    this.loading = true
+    this.error = ''
+    const target = url || this.TABS.find(t => t.key === this.tab).url
+    try {
+      const res = await fetch(target, { headers: $store.adminAuth.headers() })
+      if (res.status === 401) { $store.adminAuth.logout(); return }
+      if (!res.ok) { this.error = 'No se pudieron cargar los registros (' + res.status + ').'; return }
+      const data = await res.json()
+      this.rows = url ? [...this.rows, ...data.results] : data.results
+      this.next = data.next
+      this.count = data.count
+    } catch { this.error = 'No se pudieron cargar los registros.' }
+    finally { this.loading = false }
+  },
+
+  fmtDate(iso) {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  },
+}">
+
+  <!-- Tabs -->
+  <div class="flex flex-wrap gap-2 mb-5">
+    <template x-for="t in TABS" :key="t.key">
+      <button @click="select(t.key)"
+              class="text-sm font-semibold rounded-xl px-4 py-2"
+              :style="tab === t.key ? 'background:rgba(240,160,196,0.2);color:#E285AF;border:none;cursor:pointer' : 'background:rgba(255,255,255,0.04);color:#D8C4AC;border:none;cursor:pointer'"
+              x-text="t.label"></button>
+    </template>
+  </div>
+
+  <div class="sa-card">
+    <p class="text-xs mb-3" style="color:#A89580">
+      <span x-text="count"></span> registro(s)
+      <span x-show="tab === 'audit'"> · todavía no hay código que escriba auditoría: esta lista va a estar vacía hasta que se implemente.</span>
+    </p>
+    <p x-show="error" class="text-sm mb-3" style="color:#F28B82" x-text="error"></p>
+
+    <!-- Webhooks -->
+    <div x-show="tab === 'webhooks'" class="overflow-x-auto">
+      <table class="sa-table">
+        <thead><tr><th>Fecha</th><th>Tópico</th><th>ID MP</th><th>Procesado</th><th>Error</th></tr></thead>
+        <tbody>
+          <template x-for="r in (tab === 'webhooks' ? rows : [])" :key="r.id">
+            <tr>
+              <td x-text="fmtDate(r.created_at)"></td>
+              <td x-text="r.topic"></td>
+              <td x-text="r.mp_id"></td>
+              <td x-text="r.processed ? 'Sí · ' + fmtDate(r.processed_at) : 'No'"></td>
+              <td class="text-xs" style="color:#F28B82" x-text="r.error || '—'"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Envíos -->
+    <div x-show="tab === 'deliveries'" class="overflow-x-auto">
+      <table class="sa-table">
+        <thead><tr><th>Fecha</th><th>Pedido</th><th>Mensaje</th><th>Destinatario</th><th>Estado</th><th>Vía</th><th>Detalle</th></tr></thead>
+        <tbody>
+          <template x-for="r in (tab === 'deliveries' ? rows : [])" :key="r.id">
+            <tr>
+              <td x-text="fmtDate(r.created_at)"></td>
+              <td><a :href="'/admin/orders/' + r.order + '/'" style="color:#E285AF" x-text="'#' + r.order"></a></td>
+              <td x-text="r.template === 'custom' ? r.subject : r.template_display"></td>
+              <td x-text="r.recipient || '—'"></td>
+              <td><span class="text-xs font-semibold rounded-full px-2 py-0.5" :style="DELIVERY_STYLES[r.status]" x-text="r.status_display"></span></td>
+              <td x-text="r.provider || '—'"></td>
+              <td class="text-xs" x-text="r.error || (r.triggered_by_name ? 'manual por ' + r.triggered_by_name : 'automático')"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Auditoría -->
+    <div x-show="tab === 'audit'" class="overflow-x-auto">
+      <table class="sa-table">
+        <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Objeto</th><th>IP</th></tr></thead>
+        <tbody>
+          <template x-for="r in (tab === 'audit' ? rows : [])" :key="r.id">
+            <tr>
+              <td x-text="fmtDate(r.created_at)"></td>
+              <td x-text="r.username || '—'"></td>
+              <td x-text="r.action"></td>
+              <td x-text="r.model_name + ' #' + r.object_id"></td>
+              <td x-text="r.ip_address || '—'"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <p x-show="!loading && rows.length === 0 && !error" class="text-sm py-4" style="color:#A89580">Sin registros.</p>
+    <p x-show="loading" class="text-sm py-4" style="color:#A89580">Cargando...</p>
+    <button x-show="next && !loading" @click="load(next)"
+            class="text-sm font-semibold rounded-xl px-4 py-2 mt-3"
+            style="background:rgba(255,255,255,0.06);color:#D8C4AC;border:none;cursor:pointer">Cargar más</button>
+  </div>
+</div>
+{% endblock %}

@@ -182,7 +182,7 @@ async function handlePay() {
     Redirigiendo a Mercado Pago...`
 
   try {
-    const res  = await fetch(`/api/public/${window.DULCERAS.tenant}/payments/orders/{{ order.id }}/initiate/`, {
+    const res  = await fetch('/api/public/payments/orders/{{ order.id }}/initiate/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })

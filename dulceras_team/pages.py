@@ -1,64 +1,48 @@
 """Template views for server-rendered pages."""
 from django.shortcuts import render
 
-TENANT_SLUG = 'dulceras-team'
-
-
-def _get_tenant():
-    from tenants.models import Tenant
-    return Tenant.objects.filter(slug=TENANT_SLUG, is_active=True).first()
-
 
 # ── Public ─────────────────────────────────────────────────────────────────────
 
 def landing(request):
-    tenant = _get_tenant()
-    products, reviews = [], []
-    if tenant:
-        from catalog.models import Product
-        from customers.models import Review
-        raw = list(
-            Product.objects
-            .filter(tenant=tenant, is_active=True)
-            .select_related('category')
-            .prefetch_related('variants')
-            .order_by('sort_order', 'name')[:9]
-        )
-        for p in raw:
-            active = [v for v in p.variants.all() if v.is_active]
-            prices = [float(v.price) for v in active if float(v.price) > 0]
-            p.min_price = min(prices) if prices else None
-            p.has_stock = any(v.stock_quantity > 0 for v in active)
-        products = raw
-        reviews = list(Review.objects.filter(tenant=tenant, is_approved=True)[:12])
+    from catalog.models import Product
+    from customers.models import Review
+    products = list(
+        Product.objects
+        .filter(is_active=True)
+        .select_related('category')
+        .prefetch_related('variants')
+        .order_by('sort_order', 'name')[:9]
+    )
+    for p in products:
+        active = [v for v in p.variants.all() if v.is_active]
+        prices = [float(v.price) for v in active if float(v.price) > 0]
+        p.min_price = min(prices) if prices else None
+        p.has_stock = any(v.stock_quantity > 0 for v in active)
+    reviews = list(Review.objects.filter(is_approved=True)[:12])
     return render(request, 'landing/home.html', {'products': products, 'reviews': reviews})
 
 
 def catalog(request):
-    tenant = _get_tenant()
-    categories, products = [], []
-    if tenant:
-        from catalog.models import Category, Product
-        categories = list(Category.objects.filter(tenant=tenant, is_active=True).order_by('name'))
-        raw = list(
-            Product.objects
-            .filter(tenant=tenant, is_active=True)
-            .select_related('category')
-            .prefetch_related('variants')
-            .order_by('sort_order', 'name')
-        )
-        for p in raw:
-            all_variants = list(p.variants.all())
-            active = [v for v in all_variants if v.is_active]
-            prices = [float(v.price) for v in active if float(v.price) > 0]
-            p.min_price = min(prices) if prices else None
-            p.has_stock = any(v.stock_quantity > 0 for v in active)
-            # price as int avoids locale comma-decimal issue in Alpine JS expressions
-            p.active_variants = [
-                {'id': v.id, 'name': v.name, 'price': int(v.price), 'stock_quantity': v.stock_quantity}
-                for v in active
-            ]
-        products = raw
+    from catalog.models import Category, Product
+    categories = list(Category.objects.filter(is_active=True).order_by('name'))
+    products = list(
+        Product.objects
+        .filter(is_active=True)
+        .select_related('category')
+        .prefetch_related('variants')
+        .order_by('sort_order', 'name')
+    )
+    for p in products:
+        active = [v for v in p.variants.all() if v.is_active]
+        prices = [float(v.price) for v in active if float(v.price) > 0]
+        p.min_price = min(prices) if prices else None
+        p.has_stock = any(v.stock_quantity > 0 for v in active)
+        # price as int avoids locale comma-decimal issue in Alpine JS expressions
+        p.active_variants = [
+            {'id': v.id, 'name': v.name, 'price': int(v.price), 'stock_quantity': v.stock_quantity}
+            for v in active
+        ]
     return render(request, 'catalog/catalog.html', {
         'categories': categories,
         'products': products,
@@ -69,25 +53,21 @@ def checkout(request):
     return render(request, 'checkout/checkout.html')
 
 
-def register_tenant(request):
-    return render(request, 'register/register.html')
-
-
 # ── Customer account ───────────────────────────────────────────────────────────
 
 def cuenta_login(request):
-    return render(request, 'cuenta/login.html', {'tenant_slug': TENANT_SLUG})
+    return render(request, 'cuenta/login.html')
 
 
 def cuenta_registro(request):
-    return render(request, 'cuenta/registro.html', {'tenant_slug': TENANT_SLUG})
+    return render(request, 'cuenta/registro.html')
 
 
 def cuenta_pedidos(request):
-    return render(request, 'cuenta/orders.html', {'tenant_slug': TENANT_SLUG})
+    return render(request, 'cuenta/orders.html')
 
 
-# ── Admin panel (tenant admin / staff) ────────────────────────────────────────
+# ── Admin panel (admin / staff) ────────────────────────────────────────────────
 
 def admin_login(request):
     return render(request, 'admin_panel/login.html')
@@ -125,10 +105,6 @@ def admin_settings(request):
     return render(request, 'admin_panel/settings.html')
 
 
-def admin_billing(request):
-    return render(request, 'admin_panel/billing.html')
-
-
 def admin_coupons(request):
     return render(request, 'admin_panel/coupons.html')
 
@@ -137,19 +113,7 @@ def admin_reviews(request):
     return render(request, 'admin_panel/reviews.html')
 
 
-# ── Superadmin ─────────────────────────────────────────────────────────────────
+# ── Superadmin: panel Sistema ──────────────────────────────────────────────────
 
-def superadmin_metrics(request):
-    return render(request, 'superadmin/metrics.html')
-
-
-def superadmin_tenants(request):
-    return render(request, 'superadmin/tenants.html')
-
-
-def superadmin_tenant_detail(request, tenant_id):
-    return render(request, 'superadmin/tenant_detail.html', {'tenant_id': tenant_id})
-
-
-def superadmin_plans(request):
-    return render(request, 'superadmin/plans.html')
+def superadmin_system(request):
+    return render(request, 'superadmin/system.html')
