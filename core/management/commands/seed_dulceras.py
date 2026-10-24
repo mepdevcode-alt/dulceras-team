@@ -1,3 +1,4 @@
+import secrets
 from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
@@ -211,7 +212,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--reset', action='store_true', help='Elimina y recrea todos los datos del negocio')
-        parser.add_argument('--admin-password', default='admin1234', help='Contraseña del usuario admin (default: admin1234)')
+        parser.add_argument('--admin-password', default=None, help='Contraseña del usuario admin (default: una al azar, se muestra una sola vez)')
         parser.add_argument('--skip-orders', action='store_true', help='No crear clientes ni pedidos de demo')
 
     @transaction.atomic
@@ -299,7 +300,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"      {'+' if v_created else '~'} {variant.name} — ${variant.price}")
 
         # Admin user
-        admin_password = options['admin_password']
+        # Sin contraseña fija en el código: el repo es público
+        admin_password = options['admin_password'] or secrets.token_urlsafe(12)
         if not User.objects.filter(username='admin').exists():
             User.objects.create_user(
                 username='admin',
