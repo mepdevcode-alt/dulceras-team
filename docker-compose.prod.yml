@@ -7,7 +7,9 @@ services:
   web:
     build: .
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        format: raw   # sin interpolar: el SECRET_KEY puede tener '$'
     environment:
       # SQLite y media viven en el host (./data, ./media), no dentro del contenedor
       DATABASE_URL: sqlite:////app/data/db.sqlite3
@@ -21,7 +23,7 @@ services:
       - n8n
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    image: n8nio/n8n:latest   # Docker Hub (pasa por el mirror del daemon)
     restart: unless-stopped
     ports:
       - "127.0.0.1:5678:5678"   # nunca exponer en 0.0.0.0
