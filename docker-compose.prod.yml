@@ -11,7 +11,9 @@ services:
       - path: .env
         format: raw   # sin interpolar: el SECRET_KEY puede tener '$'
     environment:
-      # SQLite y media viven en el host (./data, ./media), no dentro del contenedor
+      # SQLite y media viven en el host (./data, ./media), no dentro del contenedor.
+      # Con DB_ENGINE=mssql en el .env, settings ignora esta URL y usa SQL Server;
+      # sacarlo del .env vuelve a SQLite (rollback).
       DATABASE_URL: sqlite:////app/data/db.sqlite3
       RUN_SEED: "false"
     ports:
@@ -20,7 +22,33 @@ services:
       - ./data:/app/data
       - ./media:/app/media
     depends_on:
-      - n8n
+      n8n:
+        condition: service_started
+      sqlserver:
+        condition: service_healthy
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    # Pide >= 2 GB de RAM en el host: no levantar en un VPS de 2 GB.
+    env_file:
+      - path: .env.sqlserver   # MSSQL_SA_PASSWORD (no versionado)
+        format: raw
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+      TZ: America/Argentina/Buenos_Aires
+    ports:
+      - "127.0.0.1:1433:1433"   # solo para sqlcmd / túnel SSH; nunca 0.0.0.0
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   n8n:
     image: n8nio/n8n:latest   # Docker Hub (pasa por el mirror del daemon)
@@ -43,3 +71,4 @@ services:
 
 volumes:
   n8n_data:
+  sqlserver_data:

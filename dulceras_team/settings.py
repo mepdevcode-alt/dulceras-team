@@ -86,9 +86,12 @@ WSGI_APPLICATION = 'dulceras_team.wsgi.application'
 
 
 # Database — usa DATABASE_URL si está definida (Docker/Render/Postgres),
-# sino cae a SQL Server para dev local.
+# sino cae a SQL Server para dev local. DB_ENGINE=mssql fuerza SQL Server
+# aunque haya DATABASE_URL (el compose de producción la fija a SQLite como
+# fallback: sacar DB_ENGINE del .env vuelve a SQLite).
 _database_url = os.environ.get('DATABASE_URL') or config('DATABASE_URL', default='')
-if _database_url:
+_force_mssql = config('DB_ENGINE', default='').lower() == 'mssql'
+if _database_url and not _force_mssql:
     import dj_database_url
     DATABASES = {
         'default': dj_database_url.config(default=_database_url, conn_max_age=600)
